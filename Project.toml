@@ -1,0 +1,21 @@
+name = "IDL"
+uuid = "d8fbff9c-ffdd-4f12-b08d-aa41cc43ce74"
+authors = ["Camillo Schenone"]
+version = "0.1.0"
+
+[deps]
+CEnum = "fa961155-64e5-5f13-b03f-caf6b980ea82"
+REPL = "3fa0cd96-eef1-5676-8a61-b3b8758bbffb"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+StaticArraysCore = "1e83bf80-4336-4d27-bf5d-d5a4f845583c"
+
+[compat]
+CEnum = "0.5.0"
+StaticArrays = "1.9.10"
+StaticArraysCore = "1.4.3"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
