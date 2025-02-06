@@ -1,0 +1,6 @@
+*~
+-*
+.sublime-*
+*.pdf
+*.c
+*.dll
