@@ -16,8 +16,7 @@ struct IDLArray{T, N} <: AbstractArray{T, N}
 end
 
 function IDLArray{T}(arr::IDL_ARRAY, inheriteddata = C_NULL) where T
-	ndims = arr.n_dim % Int
-	return IDLArray{T, ndims}(arr, inheriteddata, s)
+	return IDLArray{T, Int(arr.n_dim)}(arr, inheriteddata)
 end
 
 _dataptr(X::IDLArray{T, N}) where {T, N} =

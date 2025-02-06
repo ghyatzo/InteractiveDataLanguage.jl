@@ -56,7 +56,7 @@ end
 
 function jl_type(idl_t)
 	jl_t = begin
-		idl_t == IDL_TYP_UNDEF 	  ? nothing 	:
+		# idl_t == IDL_TYP_UNDEF 	  ? nothing 	:
 		idl_t == IDL_TYP_BYTE 	  ? Cuchar 		:
 		idl_t == IDL_TYP_INT 	  ? Cshort 		:
 		idl_t == IDL_TYP_UINT 	  ? Cushort 	:

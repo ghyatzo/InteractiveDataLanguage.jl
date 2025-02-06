@@ -1,16 +1,3 @@
-# struct IDLError
-# 	msg::String
-# 	sysmsg::String
-# 	code::Int
-# end
-
-# function extractError()
-# 	err_msg = IDL_STRING_STR(IDL_SysvErrStringFunc())
-# 	syserr_msg = IDL_STRING_STR(IDL_SysvSyserrStringFunc())
-# 	code = IDL_SysvErrCodeValue() # SysvErrorCodeValue()?
-
-# 	return IDLError(err_msg, syserr_msg, code)
-# end
 
 
 ###=== IDL -> JULIA ===###
@@ -38,8 +25,7 @@ function get_var(_var::Ptr{IDL_VARIABLE})
 
 	if (var_f & IDL_V_ARR) != 0
 		arr = unsafe_load(unsafe_load(_var.value.arr))
-		ndims = arr.n_dim
-		nelts = arr.n_elts
+		ndims = arr.n_dim % Int
 
 		if (var_f & IDL_V_STRUCT) != 0
 			# IDL_V_STRUCT implies IDL_V_ARR
@@ -47,61 +33,35 @@ function get_var(_var::Ptr{IDL_VARIABLE})
 			sref = unsafe_load(_var.value.s)
 
 			s = IDLStruct(sref)
-			struct_t = typeof(s)
-
-			if nelts > 1
-				#var.value.s.arr == var.value.arr (C Union)
-				elsize = arr.elt_len
-				array = Array{struct_t, ndims}(undef, nelts)
-				array[1] = s
-				for i in 2:nelts
-					offset = elsize * (i-1)
-					array[i] = IDLStruct(s, s.ptr + offset)
-				end
-				return array
-			else
-				return s
-			end
+		 	# Array of structs in IDL are a mix between SoA and AoS...
+		 	# The memory layout is like an AoS with all values inlined in the same array
+		 	# in order, but the first struct defines the type of struct all other structs
+		 	# will have to be consistent with.
+			return _maybe_struct_array(s, arr)
 		end
 		jltype = jl_type(var_t)
 		array = IDLArray{jltype, ndims}(arr, C_NULL)
-		return PermutedDimsArray(array, dimsperm(ndims(array)))
+		return PermutedDimsArray(array, dimsperm(length(size(array))))
 	end
 
 	return get_scalarvar(_var)
 end
 
-# function _get_idl_struct_array(_var::Ptr{IDL_VARIABLE})
-# 	# Array of structs in IDL are a mix between SoA and AoS...
-# 	# The memory layout is like an AoS with all values inlined in the same array
-# 	# in order, but the first struct defines the type of struct all other structs
-# 	# will have to be consistent with.
-# 	arr = _var.value.arr |> unsafe_load |> unsafe_load
-# 	sref = _var.value.s |> unsafe_load
+function _maybe_struct_array(s::IDLStruct{N, L, T, n}, arr::IDL_ARRAY) where {N, L, T, n}
 
 # 	# In IDL there is no real distinction between a struct
 # 	# and an array of structures with only one element.
 # 	# So we split here the logic.
-# 	N = arr.n_elts
-# 	struct_nt = IDLStruct(sref)
-# 	if N == 1
-# 		return struct_nt
-# 	else
-# 		# array of structs in IDL can only be uniform with the same struct.
-# 		# So we can construct things
-# 		r = typeof(struct_nt)[]
-# 		elsize = arr.elt_len # size of the struct
-# 		arrlen = arr.arr_len
+	arr.n_elts == 1 && return s
 
-# 		_data = arr.data
-# 		for i in 0:N-1
-# 			_struct_offset = _data + (elsize * i)
-# 			push!(r, makestruct(sref, _struct_offset))
-# 		end
-
-# 		return r
-# 	end
-# end
+	elsize = arr.elt_len
+	array = IDLStruct{N, L, T, n}[s]
+	for i in 2:arr.n_elts
+		offset = elsize * (i-1)
+		push!(array, IDLStruct(s, s.ptr + offset))
+	end
+	return reshape(array, arr.dim[1:Int(arr.n_dim)])
+end
 
 
 function get_scalarvar(_var::Ptr{IDL_VARIABLE})
@@ -124,9 +84,9 @@ function get_scalarvar(_var::Ptr{IDL_VARIABLE})
 	IDL_VarGetData(_var, _n, __data, IDL_TRUE)
 
 	if (var_f & IDL_V_BOOLEAN) != 0
-		return convert(Ptr{Bool}, __data[]) |> unsafe_load
+		return unsafe_load(convert(Ptr{Bool}, __data[]))
 	else
-		return convert(Ptr{jl_type(var_t)}, __data[]) |> unsafe_load
+		return unsafe_load(convert(Ptr{jl_type(var_t)}, __data[]))
 	end
 end
 
@@ -136,13 +96,6 @@ end
 
 
 function put_var end
-
-# Structs in IDL can be named or anonymous.
-# named structs are simply user defined structs. That must be isbitstype.
-# That means all field must contain isbits types (Pointers count as isbits)
-#
-# Anonymous structs are named tuples with the same restrictions as above
-# namely, all fields must be isbitstypes.
 
 abstract type GENERIC_JL_STRUCT end
 

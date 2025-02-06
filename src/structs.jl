@@ -1,49 +1,36 @@
-abstract type GenericIDLStruct end
-abstract type StructTag{T} end
 
-Base.eltype(::StructTag{T}) where {T} = T
-offset(s::StructTag) = s.offset
+## Hacky forward declaration of the IDLStruct structure
+## So that we can use it for the Nested structure tag type
+try struct IDLStruct{N, L, T, n}
+	sref::IDL_SREF
+	tags::NTuple{n, StructTag}
+	ptr::Ptr{UInt8}
+end catch; end
 
-struct NestedStructTag{T <: GenericIDLStruct} <: StructTag{T}
-	s::T
-	offset::UInt8
+
+struct StructTag{T}
+	value::T
+	offset::UInt
 end
-NestedStructTag(sref, dataptr, offset) = begin
-	inner_s = IDLStruct(sref, dataptr + offset)
-	return NestedStructTag{typeof(inner_s)}(inner_s, offset)
+
+StructTag(sref::IDL_SREF, _data, offset) = begin
+	inner_s = IDLStruct(sref, _data + offset)
+	StructTag{typeof(inner_s)}(inner_s, offset)
 end
-value(t::NestedStructTag) = t.s
-gettag(t::NestedStructTag) = value(t)
 
-
-
-
-struct ArrayTag{T, N} <: StructTag{T}
-	arr::IDLArray{T, N}
-	offset::UInt8
+StructTag(idlarr::IDL_ARRAY, eltype::Type, _data, offset) = begin
+	arr = IDLArray{eltype, Int(idlarr.n_dim)}(idlarr, _data + offset)
+	StructTag{typeof(arr)}(arr, offset)
 end
-ArrayTag{T}(arr::IDL_ARRAY, dataroot, offset) where {T} = begin
-	N = arr.n_dim % Int
-	return ArrayTag{T, N}(IDLArray{T, N}(arr, dataroot + offset), offset)
-end
-value(t::ArrayTag) = t.arr
-gettag(t::ArrayTag) = value(t)
 
 
+Base.eltype(::StructTag{T}) where T = T
+value(t::StructTag) = t.value
+offset(t::StructTag) = t.offset
 
-
-struct ScalarTag{T} <: StructTag{T}
-	ptr::Ptr{T}
-	offset::UInt8
-	ScalarTag{T}(dataptr, offset) where T = new{T}(dataptr + offset, offset)
-end
-value(t::ScalarTag) = t.ptr
-gettag(t::ScalarTag) = unsafe_load(value(t))
-gettag(t::ScalarTag{IDL_STRING}) = convert(String, value(t))
-
-
-tagoffset(t::StructTag) = t.offset
-
+gettag(s::StructTag{T}) where T = value(s)
+gettag(s::StructTag{Ptr{T}}) where T <: JL_SCALAR = unsafe_load(value(s))
+gettag(s::StructTag{IDL_STRING}) = convert(String, unsafe_load(value(s)))
 
 
 _extract_tag_info(sref::IDL_SREF, i::Int) = begin
@@ -57,39 +44,38 @@ _extract_tag_info(sref::IDL_SREF, i::Int) = begin
 end
 
 
-function (::Type{StructTag})(sref::IDL_SREF, i::Int, _data)
+function _make_tag(sref::IDL_SREF, i::Int, _data)
 
 	_tagvar, offset = _extract_tag_info(sref, i)
 	tagvar_f, tagvar_t = varinfo(_tagvar)
 
 	tagvar_t == IDL_TYP_STRUCT && begin
 		innersref = unsafe_load(_tagvar.value.s)
-		return NestedStructTag(innersref, _data, offset)
+		return StructTag(innersref, _data, offset)
 	end
 
 	T = jl_type(tagvar_t)
 
 	(tagvar_f & IDL_V_ARR != 0) && begin
 		arr = unsafe_load(unsafe_load(_tagvar.value.arr))
-		return ArrayTag{T}(arr, _data, offset)
+		return StructTag(arr, T, _data, offset)
 	end
 
-	return ScalarTag{T}(_data, offset)
+	return StructTag(Ptr{T}(_data + offset), offset % UInt)
 end
 
 
-
-struct IDLStruct{N, L, T} <: GenericIDLStruct
+struct IDLStruct{N, L, T, n}
 	sref::IDL_SREF
-	tags::Tuple{Vararg{StructTag}}
+	tags::NTuple{n, StructTag}
 	ptr::Ptr{UInt8}
 end
 
-Base.propertynames(::IDLStruct{N, L, T}) where {N, L, T} = L
-Base.nameof(::IDLStruct{N, L, T}) where {N, L, T} = N
-ntags(::IDLStruct{N, L, T}) where {N, L, T} = length(L)
-tags(::IDLStruct{N, L, T}) where {N, L, T} = L
-tagtypes(::IDLStruct{N, L, T}) where {N, L, T} = fieldtypes(T)
+Base.propertynames(::IDLStruct{N, L, T, n}) where {N, L, T, n} = L
+Base.nameof(::IDLStruct{N, L, T, n}) where {N, L, T, n} = N
+ntags(::IDLStruct{N, L, T, n}) where {N, L, T, n} = n
+tags(::IDLStruct{N, L, T, n}) where {N, L, T, n} = L
+tagtypes(::IDLStruct{N, L, T, n}) where {N, L, T, n} = fieldtypes(T)
 tagtype(s::IDLStruct, i::Integer) = tagtypes(s)[i]
 tagtype(s::IDLStruct, t::Symbol) = begin
 	i = findfirst(==(t), tags(s))
@@ -104,16 +90,16 @@ function IDLStruct(sref::IDL_SREF, inherited_data = C_NULL)
 
 	# The call returns an Int32, which somehow breaks ntuple
 	# We hardcast to an Int...
-	N = IDL_StructNumTags(sref.sdef) % Int
+	n = IDL_StructNumTags(sref.sdef) % Int
 
-	tags = ntuple(N) do i
+	tags = ntuple(n) do i
 		_tagname = IDL_StructTagNameByIndex(sref.sdef, i - 1, IDL_MSG_RET, C_NULL)
 		tagname = unsafe_string(_tagname)
 		Symbol(tagname)
 	end
 
-	values = ntuple(N) do i
-		StructTag(sref, i, _data)
+	values = ntuple(n) do i
+		_make_tag(sref, i, _data)
 	end
 
 	_struct_name = Ref{Ptr{Cchar}}()
@@ -123,36 +109,41 @@ function IDLStruct(sref::IDL_SREF, inherited_data = C_NULL)
 	if stname == "<Anonymous>"
 		stname = "" # the <Anonymous> thing is hardcoded in IDL.
 	end
-	return IDLStruct{Symbol(stname), tags, typeof(values)}(sref, values, _data)
+	return IDLStruct{Symbol(stname), tags, typeof(values), n}(sref, values, _data)
 end
 
 
+_clone_tag(s::StructTag{A}, _newdataroot::Ptr) where {T, N, A <: IDLArray{T, N}} = begin
+	arrdef = value(s).meta
+	newarr = IDLArray{T, N}(arrdef, _newdataroot + offset(s))
+	StructTag(newarr, offset(s))
+end
+
+_clone_tag(s::StructTag{Ptr{T}}, _newdataroot::Ptr) where T <: JL_SCALAR = begin
+	StructTag(Ptr{T}(_newdataroot + offset(s)), offset(s))
+end
+
+_clone_tag(s::StructTag{T}, _newdataroot::Ptr) where T <: IDLStruct = begin
+	sref = value(s).sref
+	StructTag(sref, _newdataroot, offset)
+end
 
 function IDLStruct(
-	s::IDLStruct{N, L, T}, dataptr::Ptr{UInt8}
-) where {N, L, T}
+	s::IDLStruct{N, L, T, n}, _dataptr::Ptr{UInt8}
+) where {N, L, T, n}
 
-	tagtypes = fieldtypes(T)
-	values = ntuple(length(L)) do i
-		type = tagtypes[i]
+	values = ntuple(n) do i
 		tag = s.tags[i]
 
-		type isa ScalarTag &&
-			return ScalarTag{eltype(tag)}(dataptr, offset(tag))
-
-		type isa ArrayTag &&
-			return ArrayTag{eltype(tag)}(value(tag).meta, dataptr, offset(tag))
-
-		type isa NestedStructTag &&
-			NestedStructTag(value(tag).sref, dataptr, offset(tag))
+		_clone_tag(tag, _dataptr)
 	end
 
-	return IDLStruct{N, L, T}(s.sref, values, dataptr)
+	return IDLStruct{N, L, T, n}(s.sref, values, _dataptr)
 end
 
 
 
-function IDLStruct{N, L, T}(values...) where {N, L, T}
+function IDLStruct{N, L, T, n}(values...) where {N, L, T, n}
 	N isa Symbol ||
 		throw(TypeError(:IDLStruct, Type{Symbol}, N))
 
@@ -162,32 +153,29 @@ function IDLStruct{N, L, T}(values...) where {N, L, T}
 	T <: Tuple ||
 		throw(TypeError(:IDLStruct, Tuple{StructTag}, T))
 
-	length(L) == length(values) ||
-		throw(ArgumentError("Tag names and values must have the same length."))
-
 	eltypes = fieldtypes(T)
-	length(eltypes) == length(values) ||
-		throw(ArgumentError("Tag types and values must have the same length."))
+	length(L) == length(values) == length(eltypes) == n ||
+		throw(ArgumentError("Inconsistent length across parameters."))
 
 	for (tag, type) in zip(values, eltypes)
 		tag isa type || throw(TypeError(:IDLStruct, type, tag))
 	end
 
-	return IDLStruct{N, L, T}(values, C_NULL) #FIXME: How to include julia defined data?
+	return IDLStruct{N, L, T, n}(values, C_NULL) #FIXME: How to include julia defined data?
 end
 
 IDLStruct{N, L}(values...) where {N, L} =
-	IDLStruct{N, L, typeof(values)}(values, C_NULL)
+	IDLStruct{N, L, typeof(values), length(L)}(values, C_NULL)
 
 IDLStruct{L, T}(values...) where {L, T <: Tuple} =
-	IDLStruct{Symbol(""), L, T}(values, C_NULL)
+	IDLStruct{Symbol(""), L, T, length(L)}(values, C_NULL)
 
 IDLStruct{L}(values...) where {L} =
-	IDLStruct{Symbol(""), L, typeof(values)}(values, C_NULL)
+	IDLStruct{Symbol(""), L, typeof(values), length(L)}(values, C_NULL)
 
 
 
-function Base.getproperty(s::IDLStruct{N, L, T}, f::Symbol) where {N, L, T}
+function Base.getproperty(s::IDLStruct{N, L, T, n}, f::Symbol) where {N, L, T, n}
 	f in fieldnames(IDLStruct) && return getfield(s, f)
 
 	i = findfirst(==(f), L)
@@ -196,7 +184,8 @@ function Base.getproperty(s::IDLStruct{N, L, T}, f::Symbol) where {N, L, T}
 	return gettag(s.tags[i])
 end
 
-function Base.show(io::IO, s::IDLStruct{N, L, T}) where {N, L, T}
+function Base.show(io::IO, s::IDLStruct{N, L, T, n}) where {N, L, T, n}
+
 	if N == Symbol()
 		print(io, "IDLStruct{")
 		tag1, rtags... = L
