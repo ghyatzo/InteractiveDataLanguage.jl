@@ -1,5 +1,22 @@
 module IDL
 
+# References (in no particular order)
+# [1] https://www.nv5geospatialsoftware.com/docs/PassingStructures.html
+# [2] https://www.irya.unam.mx/computo/sites/manuales/IDL/Content/Creating%20IDL%20Programs/Components%20of%20the%20IDL%20Language/Creating_and_Defining_St.html
+# [3] https://www.geo.mtu.edu/geoschem/docs/IDL_Manuals/EXTERNAL%20DEVELOPMENT%20GUIDE.pdf
+# [4] https://www.nv5geospatialsoftware.com/docs/Error_Handling_System_Va.html
+# [5] https://www.nv5geospatialsoftware.com/docs/MESSAGE.html
+# [6] https://www.nv5geospatialsoftware.com/docs/EDG.html
+# [7] https://math.nist.gov/mcsd/savg/idl2/callexternal.htm
+# [8] https://www.nv5geospatialsoftware.com/docs/UsingCallableIDL.html
+# [9] https://discourse.julialang.org/t/mutate-ntuple-at-position/17682/6
+# [10] https://discourse.julialang.org/t/how-to-keep-a-reference-for-c-structure-to-avoid-gc/9310
+# [11] https://github.com/JuliaPy/PyCall.jl/blob/314ac274326e78f12fbcb73ae0f17f63a3f4bba9/src/pytype.jl#L314
+# [12] https://nv5geospatialsoftware.co.jp/docs/Columns__Rows__and_Array.html
+# [13] https://discourse.julialang.org/t/memory-management-and-packagecompiler-libraries/72980/7
+# [14] https://discourse.julialang.org/t/cconvert-and-unsafe-convert-with-immutable-struct-containing-a-pointer/124479/5
+# [15] https://github.com/tk3369/julia-notebooks/blob/master/ccall%20-%20using%20cconvert%20and%20unsafe_convert.ipynb
+
 using StaticArrays
 
 if Sys.isunix()
@@ -23,10 +40,6 @@ include("../lib/lib_idl.jl")
 # === Manual Wrappers of (maybe) used macros
 IDL_STRING_STR(str::IDL_STRING) = str.slen > 0 ? unsafe_string(str.s) : ""
 IDL_STRING_STR(str_::Ptr{IDL_STRING}) = IDL_STRING_STR(unsafe_load(str_))
-IDL_ABS(x) = abs(x)
-IDL_CARRAY_ELTS(arr) = sizeof(arr) / sizeof(eltype(arr))
-IDL_MIN(x,y) = min(x, y)
-IDL_MAX(x,y) = max(x, y)
 
 # === InitData Default Constructor
 IDL_INIT_DATA(init_options::Int64) = IDL_INIT_DATA(convert(IDL_INIT_DATA_OPTIONS_T, init_options))
