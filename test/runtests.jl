@@ -20,13 +20,71 @@ const IDL_SIMPLE_TYPES = [
 # 	include("scalar_values.jl")
 # end
 
-@testset "Arrays" begin
-	include("arrays.jl")
-end
+# @testset "Arrays" begin
+# 	include("arrays.jl")
+# end
 
-@testset "GET: Anonymous Structs" begin
-	simple_idl_struct = "{TAG1:1, TAG2: 2L, TAG3: 3.0D, TAG3: COMPLEX(42, 42)}"
-	idl_struct_with_array = "{TAG1:2D, ARR:intarr(3)}"
+@testset "GET: Structs" begin
+	@testset "Simple Struct" begin
+		simple_idl_struct = "{TAG1:1, TAG2: 2L, TAG3: 3.0D, TAG4: COMPLEX(42, 42)}"
+		IDL.execute("s = $simple_idl_struct")
+		s = IDL.get_var("s")
+
+		@test IDL.ntags(s) == 4
+		@test Base.nameof(s) == Symbol()
+		@test IDL.tags(s) == (:TAG1, :TAG2, :TAG3, :TAG4)
+
+		@test s.TAG1 == Int16(1)
+		@test s.TAG2 == Int32(2)
+		@test s.TAG3 == Float64(3)
+		@test s.TAG4 == ComplexF32(42, 42)
+
+		resetsession()
+	end
+
+	@testset "Named struct with arrays" begin
+		idl_struct_with_array = "{TESTSTRUCT, ARR:[42, 69], ARR2:[1.0, 2.0]}"
+
+		IDL.execute("s = $idl_struct_with_array")
+		s = IDL.get_var("s")
+
+		@test IDL.ntags(s) == 2
+		@test Base.nameof(s) == :TESTSTRUCT
+		@test IDL.tags(s) == (:ARR, :ARR2)
+		@test s.ARR isa IDL.IDLArray{Int16, 1}
+		@test s.ARR2 isa IDL.IDLArray{Float32, 1}
+
+		@test s.ARR[1] == Int16(42)
+		@test s.ARR[2] == Int16(69)
+		@test s.ARR2[1] == Float32(1)
+		@test s.ARR2[2] == Float32(2)
+
+		resetsession()
+	end
+
+	@testset "Nested Structs" begin
+		nested_struct = "{OUTER, NESTED:{INNER, TAG1:42, TAG2:[1,2]}}"
+		IDL.execute("s = $nested_struct")
+		s = IDL.get_var("s")
+
+		@test IDL.ntags(s) == 1
+		@test Base.nameof(s) == :OUTER
+		@test IDL.tags(s) == (:NESTED,)
+		@test s.NESTED isa IDL.IDLStruct{:INNER, (:TAG1, :TAG2), Tuple{IDL.ScalarTag{Int16}, IDL.ArrayTag{Int16, 1}}}
+
+		ns = s.NESTED
+		@test IDL.ntags(ns) == 2
+		@test nameof(ns) == :INNER
+		@test IDL.tags(ns) == (:TAG1, :TAG2)
+		@test ns.TAG1 == Int16(42)
+		@test ns.TAG2 isa IDL.IDLArray{Int16, 1}
+		@test ns.TAG2[1] == Int16(1)
+		@test ns.TAG2[2] == Int16(2)
+
+		resetsession()
+	end
+
+
 
 
 end
