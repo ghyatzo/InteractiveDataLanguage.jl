@@ -27,7 +27,7 @@ function get_var(name::AbstractString)
 end
 
 function get_var(_var::Ptr{IDL_VARIABLE})
-	var_f = _var.flags |> unsafe_load
+	var_f, var_t = varinfo(_var)
 
 	if (var_f & IDL_V_NULL) != 0
 		return nothing
