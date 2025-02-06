@@ -84,6 +84,8 @@ varinfo(_var::Ptr{IDL_VARIABLE}) = (varflags(_var), vartype(_var))
 include("type_conversion.jl")
 
 include("arrays.jl")
+
+include("structs.jl")
 include("common.jl")
 
 # include("IDLREPL.jl")
