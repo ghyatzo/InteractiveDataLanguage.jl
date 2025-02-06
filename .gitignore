@@ -1,6 +1,6 @@
 *~
 _*
-.sublime-*
+*.sublime-*
 *.pdf
 *.c
 *.dll
