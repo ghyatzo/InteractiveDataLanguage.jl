@@ -20,9 +20,9 @@ const IDL_SIMPLE_TYPES = [
 # 	include("scalar_values.jl")
 # end
 
-# @testset "Arrays" begin
-# 	include("arrays.jl")
-# end
+@testset "Arrays" begin
+	include("arrays.jl")
+end
 
 @testset "GET: Structs" begin
 	@testset "Simple Struct" begin
@@ -70,7 +70,13 @@ const IDL_SIMPLE_TYPES = [
 		@test IDL.ntags(s) == 1
 		@test Base.nameof(s) == :OUTER
 		@test IDL.tags(s) == (:NESTED,)
-		@test s.NESTED isa IDL.IDLStruct{:INNER, (:TAG1, :TAG2), Tuple{IDL.ScalarTag{Int16}, IDL.ArrayTag{Int16, 1}}}
+		@test s.NESTED isa
+			IDL.IDLStruct{
+				:INNER,
+				(:TAG1, :TAG2),
+				Tuple{IDL.StructTag{Ptr{Int16}}, IDL.StructTag{IDL.IDLArray{Int16, 1}}},
+				2
+			}
 
 		ns = s.NESTED
 		@test IDL.ntags(ns) == 2
@@ -84,7 +90,20 @@ const IDL_SIMPLE_TYPES = [
 		resetsession()
 	end
 
+	@testset "Array of structs" begin
+		sa_string = "[{A:1, B:2}, {A:4, B:10}]"
+		IDL.execute("s = $sa_string")
+		sa = IDL.get_var("s")
 
+		@test length(sa) == 2
+		@test typeof(first(sa)) == typeof(last(sa))
+		@test sa[1].A == 1
+		@test sa[1].B == 2
+		@test sa[2].A == 4
+		@test sa[2].B == 10
+
+		resetsession()
+	end
 
 
 end
