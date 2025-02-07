@@ -1,18 +1,24 @@
-
+execute(str::AbstractString) = IDL.IDL_ExecuteStr(str)
+help() = execute("help")
+help(s::AbstractString) = execute("help, "*s)
+idlhelp(s::AbstractString) = execute("?"*s)
+reset() = execute(".reset_session")
+full_reset() = execute(".full_reset_session")
+dotrun(filename::AbstractString) = execute(".run $filename")
 
 ###=== IDL -> JULIA ===###
 
-function get_var end
+function getvar end
 
-function get_var(name::AbstractString)
+function getvar(name::AbstractString)
 	_var = IDL_GetVarAddr(name)
 	if _var == C_NULL
 		throw(UndefVarError("No variable named '$name' in the current IDL scope."))
 	end
-	get_var(_var)
+	getvar(_var)
 end
 
-function get_var(_var::Ptr{IDL_VARIABLE})
+function getvar(_var::Ptr{IDL_VARIABLE})
 	var_f, var_t = varinfo(_var)
 
 	if (var_f & IDL_V_NULL) != 0
@@ -95,7 +101,7 @@ end
 ###=== JULIA -> IDL ===###
 
 
-function put_var end
+function putvar end
 
 abstract type GENERIC_JL_STRUCT end
 
@@ -207,7 +213,7 @@ function parsestruct(st::T) where T <: DataType
 end
 
 
-function put_var(jlntup::T, name::AbstractString) where T <: NamedTuple
+function putvar(jlntup::T, name::AbstractString) where T <: NamedTuple
 	# creating a struct in IDL is done using a function call,
 	# where you provide an array of "Tags" that specifies the
 	# structure definition and then the data separately.
@@ -244,7 +250,7 @@ struct JL_ARRAY_ROOT
 	dataref::Ref
 end
 
-function put_var(jlarr::AbstractArray{T, N}, name::AbstractString) where {T <: JL_SCALAR, N}
+function putvar(jlarr::AbstractArray{T, N}, name::AbstractString) where {T <: JL_SCALAR, N}
 	idl_var_t = idl_type(T)
 
 	N > 8 && throw(ArgumentError("IDL Arrays can have at most 8 dimensions."))
@@ -282,7 +288,7 @@ function put_var(jlarr::AbstractArray{T, N}, name::AbstractString) where {T <: J
 	return _var
 end
 
-function put_var(jlvar::T, name::AbstractString) where T <: JL_SCALAR
+function putvar(jlvar::T, name::AbstractString) where T <: JL_SCALAR
 	# get or create new variable with defined name
 	_idl_var = IDL_GetVarAddr1(name, IDL_TRUE)
 
@@ -320,4 +326,3 @@ end
 
 name(_idlvar::IDL_VPTR) = IDL_VarName(_idlvar) |> unsafe_string |> Symbol
 # reset_session() = idl".reset_session"
-execute(str::AbstractString) = IDL.IDL_ExecuteStr(str)
