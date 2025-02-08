@@ -77,6 +77,9 @@ function Base.getproperty(x::Ptr{IDL_VARIABLE}, f::Symbol)
     f === :value && return Ptr{IDL_ALLTYPES}(x + 8)
     return getfield(x, f)
 end
+
+Base.propertynames(::Ptr{IDL_VARIABLE}) = (:type, :flags, :value)
+
 ## =-=-= ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 const IDL_VPTR = Ptr{IDL_VARIABLE}
