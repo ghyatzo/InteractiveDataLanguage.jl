@@ -6,6 +6,8 @@ reset() = execute(".reset_session")
 full_reset() = execute(".full_reset_session")
 dotrun(filename::AbstractString) = execute(".run $filename")
 
+
+
 ###=== IDL -> JULIA ===###
 
 function getvar end
@@ -15,10 +17,6 @@ function getvar(name::AbstractString)
 	if _var == C_NULL
 		throw(UndefVarError("No variable named '$name' in the current IDL scope."))
 	end
-	getvar(_var)
-end
-
-function getvar(_var::Ptr{IDL_VARIABLE})
 	var_f, var_t = varinfo(_var)
 
 	if (var_f & IDL_V_NULL) != 0
@@ -28,6 +26,15 @@ function getvar(_var::Ptr{IDL_VARIABLE})
 	if (var_f & IDL_V_FILE) != 0
 		error("File Variables not yet implemented")
 	end
+
+	(var_t == IDL_TYP_PTR || var_t == IDL_TYP_OBJREF) &&
+		error("Getting variables of type IDL_TYP_PTR or IDL_TYP_OBJREF is not supported.")
+
+	T = jltype(var_t)
+	getvar(T, var_f, _var)
+end
+
+function getvar(::Type{T}, var_f, _var::Ptr{IDL_VARIABLE}) where T
 
 	if (var_f & IDL_V_ARR) != 0
 		arr = unsafe_load(unsafe_load(_var.value.arr))
@@ -45,8 +52,7 @@ function getvar(_var::Ptr{IDL_VARIABLE})
 		 	# will have to be consistent with.
 			return _maybe_struct_array(s, arr)
 		end
-		jltype = jl_type(var_t)
-		array = IDLArray{jltype, ndims}(arr, C_NULL)
+		array = IDLArray{T, ndims}(arr, C_NULL)
 		return PermutedDimsArray(array, dimsperm(length(size(array))))
 	end
 
@@ -76,12 +82,6 @@ function get_scalarvar(_var::Ptr{IDL_VARIABLE})
 	(var_f & IDL_V_NOT_SCALAR) != 0 &&
 		error("the variable is not scalar!")
 
-	var_t == IDL_TYP_UNDEF &&
-		return nothing
-
-	(var_t == IDL_TYP_PTR || var_t == IDL_TYP_OBJREF) &&
-		error("Getting variables of type IDL_TYP_PTR or IDL_TYP_OBJREF is not supported.")
-
 	var_t == IDL_TYP_STRING &&
 		return unsafe_string(IDL_VarGetString(_var))
 
@@ -92,7 +92,7 @@ function get_scalarvar(_var::Ptr{IDL_VARIABLE})
 	if (var_f & IDL_V_BOOLEAN) != 0
 		return unsafe_load(convert(Ptr{Bool}, __data[]))
 	else
-		return unsafe_load(convert(Ptr{jl_type(var_t)}, __data[]))
+		return unsafe_load(convert(Ptr{jltype(var_t)}, __data[]))
 	end
 end
 
