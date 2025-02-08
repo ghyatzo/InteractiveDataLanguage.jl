@@ -66,6 +66,7 @@ free_jl_array_ref(_p::Ptr{Cuchar}) = begin
     nothing
 end
 const FREE_JLARR = Ref{Ptr{Cvoid}}()
+const IDL_DATA_FREED = Ref{Ptr{Cvoid}}()
 
 preserve_ref(_x::Ptr, x::Ref) = begin
     JL_REF_HOLDING[_x] = x
@@ -81,7 +82,10 @@ end
 varflags(_var::Ptr{IDL_VARIABLE}) = unsafe_load(_var.flags)
 vartype(_var::Ptr{IDL_VARIABLE}) = unsafe_load(_var.type)
 varinfo(_var::Ptr{IDL_VARIABLE}) = (varflags(_var), vartype(_var))
+
 include("type_conversion.jl")
+
+include("variables.jl")
 
 include("arrays.jl")
 
@@ -90,14 +94,23 @@ include("common.jl")
 
 # include("IDLREPL.jl")
 
+const ERROR_MSG = Ref{String}("")
+
 function output_callback(flags, buf::Ptr{UInt8}, n)::Cvoid
+
     msg = n > 0 ? unsafe_string(buf, n) : ""
+    nl = (flags & IDL_TOUT_F_NLPOST) != 0 ? "\n" : ""
+
 
     if (flags & IDL_TOUT_F_STDERR) != 0
-        IDL_MessageResetSysvErrorState()
-        @warn "IDL Error: $msg"
+        ERROR_MSG[] *= "$msg" * nl
+        if IDL_SysvErrorCodeValue() != 0
+            @error "IDL Error ($(IDL_SysvErrorCodeValue())):\n$(ERROR_MSG[])"
+            ERROR_MSG[] = ""
+            IDL_MessageResetSysvErrorState()
+        end
     else
-        (flags & IDL_TOUT_F_NLPOST) != 0 ? println(msg) : print(msg)
+        print(msg * nl)
     end
 end
 
