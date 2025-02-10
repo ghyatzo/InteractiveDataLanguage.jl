@@ -25,8 +25,18 @@
 struct IDLVariable
 	_v::Ptr{IDL_VARIABLE}
 end
-makevar(_v::Ptr{IDL_VARIABLE}) = IDLVariable(_v)
+makevar(_v::Ptr{IDL_VARIABLE}) = begin
+	var_f, var_t = varinfo(_var)
 
+	if (var_f & IDL_V_FILE) != 0
+		error("File Variables not yet implemented")
+	end
+
+	(var_t == IDL_TYP_PTR || var_t == IDL_TYP_OBJREF) &&
+		error("Getting variables of type IDL_TYP_PTR or IDL_TYP_OBJREF is not supported.")
+
+	IDLVariable(_v)
+end
 flags(v::IDLVariable) = unsafe_load(v._v.flags)
 
 # const variables should not be changed. not enforced by IDL.
@@ -41,7 +51,7 @@ isstruct(v::IDLVariable) = (flags(v) & IDL_V_STRUCT) != 0
 isscalar(v::IDLVariable) = !isarray(v) && !IDL.isfile(v)
 Base.isnothing(v::IDLVariable) = (flags(v) & IDL_V_NULL) != 0
 
-typeof(v::IDLVariable) = begin
+Base.eltype(v::IDLVariable) = begin
 	# TODO: check if array of struct
 	jltype(unsafe_load(v._v.type))
 end
@@ -78,6 +88,7 @@ end
 
 # [!WARN]
 # Complex numbers get truncated. Only the real part gets translated.
+# In line with IDL behaviour
 
 
 Base.convert(::Type{String}, v::IDLVariable) = begin
