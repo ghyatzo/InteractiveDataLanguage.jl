@@ -1,3 +1,16 @@
+#=
+A structs will be a type that holds all the tag informations.
+That will be wrapped by an array.
+
+So we will have IDLArrays{IDLStruct{of some kind}, N}
+
+with some overloads on the getindex properties to transparently return
+a single structure when not an array of structures.
+=#
+
+
+
+
 
 ## Hacky forward declaration of the IDLStruct structure
 ## So that we can use it for the Nested structure tag type
@@ -13,17 +26,6 @@ struct StructTag{T}
 	offset::UInt
 end
 
-StructTag(sref::IDL_SREF, _data, offset) = begin
-	inner_s = IDLStruct(sref, _data + offset)
-	StructTag{typeof(inner_s)}(inner_s, offset)
-end
-
-StructTag(idlarr::IDL_ARRAY, eltype::Type, _data, offset) = begin
-	arr = IDLArray{eltype, Int(idlarr.n_dim)}(idlarr, _data + offset)
-	StructTag{typeof(arr)}(arr, offset)
-end
-
-
 Base.eltype(::StructTag{T}) where T = T
 value(t::StructTag) = t.value
 offset(t::StructTag) = t.offset
@@ -33,6 +35,7 @@ gettag(s::StructTag{Ptr{T}}) where T <: JL_SCALAR = unsafe_load(value(s))
 gettag(s::StructTag{IDL_STRING}) = convert(String, unsafe_load(value(s)))
 
 
+
 _extract_tag_info(sref::IDL_SREF, i::Int) = begin
 	_tagvar = Ref{Ptr{IDL_VARIABLE}}()
 	offset = IDL_StructTagInfoByIndex(sref.sdef, i - 1, IDL_MSG_RET, _tagvar)
@@ -40,29 +43,28 @@ _extract_tag_info(sref::IDL_SREF, i::Int) = begin
 		throw(ArgumentError("The structure does not have an $i-th tag."))
 	end
 
-	return _tagvar[], offset
+	return IDLVariable(_tagvar[]), offset
 end
 
 
-function _make_tag(sref::IDL_SREF, i::Int, _data)
+function maketag(sref::IDL_SREF, i::Int, _dataroot)
 
-	_tagvar, offset = _extract_tag_info(sref, i)
-	tagvar_f, tagvar_t = varinfo(_tagvar)
+	tagvar, offset = _extract_tag_info(sref, i)
 
-	tagvar_t == IDL_TYP_STRUCT && begin
-		innersref = unsafe_load(_tagvar.value.s)
-		return StructTag(innersref, _data, offset)
+	if isstruct(tagvar)
+		inners = IDLStruct(tagvar, _dataroot + offset)
+		return StructTag(inners, offset % UInt)
 	end
 
-	T = jltype(tagvar_t)
-
-	(tagvar_f & IDL_V_ARR != 0) && begin
-
-		arr = unsafe_load(unsafe_load(_tagvar.value.arr))
-		return StructTag(arr, T, _data, offset)
+	if isarray(tagvar)
+		arr = IDLArray(tagvar, _dataroot + offset)
+		return StructTag(arr, offset % UInt)
 	end
 
-	return StructTag(Ptr{T}(_data + offset), offset % UInt)
+	if isscalar(tagvar)
+		_ptr = Ptr{jltype(_type(tagvar))}(_dataroot + offset)
+		return StructTag(_ptr, offset % UInt)
+	end
 end
 
 
@@ -85,8 +87,12 @@ tagtype(s::IDLStruct, t::Symbol) = begin
 	tagtype(s, i)
 end
 
-function IDLStruct(sref::IDL_SREF, inherited_data = C_NULL)
-	_data = inherited_data == C_NULL ?
+function IDLStruct(var::IDLVariable, inherited_data = C_NULL)
+	isstruct(var) || throw(ArgumentError("The variable must be a valid structure."))
+
+	sref = structdef(var)
+
+	_root = inherited_data == C_NULL ?
 		unsafe_load(sref.arr.data) : Ptr{UInt8}(inherited_data)
 
 	# The call returns an Int32, which somehow breaks ntuple
@@ -94,13 +100,13 @@ function IDLStruct(sref::IDL_SREF, inherited_data = C_NULL)
 	n = IDL_StructNumTags(sref.sdef) % Int
 
 	tags = ntuple(n) do i
-		_tagname = IDL_StructTagNameByIndex(sref.sdef, i - 1, IDL_MSG_RET, C_NULL)
-		tagname = unsafe_string(_tagname)
-		Symbol(tagname)
+		IDL_StructTagNameByIndex(
+			sref.sdef, i - 1, IDL_MSG_RET, C_NULL
+		) |> unsafe_string |> Symbol
 	end
 
 	values = ntuple(n) do i
-		_make_tag(sref, i, _data)
+		maketag(sref, i, _root)
 	end
 
 	_struct_name = Ref{Ptr{Cchar}}()
@@ -110,7 +116,7 @@ function IDLStruct(sref::IDL_SREF, inherited_data = C_NULL)
 	if stname == "<Anonymous>"
 		stname = "" # the <Anonymous> thing is hardcoded in IDL.
 	end
-	return IDLStruct{Symbol(stname), tags, typeof(values), n}(sref, values, _data)
+	return IDLStruct{Symbol(stname), tags, typeof(values), n}(sref, values, _root)
 end
 
 
