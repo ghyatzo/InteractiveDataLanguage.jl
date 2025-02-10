@@ -22,9 +22,20 @@
 # julia> _var = IDL.IDL_GetVarAddr("s")
 # Ptr{IDL.IDL_VARIABLE} @0x00000238ce6b7c40
 
+
+
+
+## Even deleting a variable simply makes it an undef!
+## IDL Variables are always valid basically...
+
+varflags(_var::Ptr{IDL_VARIABLE}) = unsafe_load(_var.flags)
+vartype(_var::Ptr{IDL_VARIABLE}) = unsafe_load(_var.type)
+varinfo(_var::Ptr{IDL_VARIABLE}) = (varflags(_var), vartype(_var))
+
 struct IDLVariable
 	_v::Ptr{IDL_VARIABLE}
 end
+
 makevar(_v::Ptr{IDL_VARIABLE}) = begin
 	var_f, var_t = varinfo(_var)
 

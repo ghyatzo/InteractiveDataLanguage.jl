@@ -79,9 +79,6 @@ preserve_ref(x::Ref) = begin
     _x
 end
 
-varflags(_var::Ptr{IDL_VARIABLE}) = unsafe_load(_var.flags)
-vartype(_var::Ptr{IDL_VARIABLE}) = unsafe_load(_var.type)
-varinfo(_var::Ptr{IDL_VARIABLE}) = (varflags(_var), vartype(_var))
 
 include("type_conversion.jl")
 
@@ -89,8 +86,8 @@ include("variables.jl")
 
 include("arrays.jl")
 
-include("structs.jl")
-include("common.jl")
+# include("structs.jl")
+# include("common.jl")
 
 # include("IDLREPL.jl")
 
