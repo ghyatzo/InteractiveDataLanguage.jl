@@ -27,7 +27,7 @@ jltype(::Val{IDL_TYP_FLOAT}) = Cfloat
 jltype(::Val{IDL_TYP_DOUBLE}) = Cdouble
 jltype(::Val{IDL_TYP_COMPLEX}) = ComplexF32
 jltype(::Val{IDL_TYP_DCOMPLEX}) = ComplexF64
-jltype(::Val{IDL_TYP_STRING}) = IDL_STRING
+jltype(::Val{IDL_TYP_STRING}) = String
 jltype(::Val{IDL_TYP_STRUCT}) = DataType # TODO...
 jltype(::Val{IDL_TYP_PTR}) = error("IDL pointers are not supported")
 jltype(::Val{IDL_TYP_OBJREF}) = error("IDL Objects are not supported")
@@ -80,3 +80,7 @@ Base.convert(::Type{IDL_COMPLEX}, c::ComplexF32) = IDL_COMPLEX(c.re, c.im)
 Base.convert(::Type{IDL_DCOMPLEX}, c::ComplexF64) = IDL_DCOMPLEX(c.re, c.im)
 Base.convert(::Type{ComplexF32}, idlc::IDL_COMPLEX) = ComplexF32(idlc.r, idlc.i)
 Base.convert(::Type{ComplexF64}, idlc::IDL_DCOMPLEX) = ComplexF64(idlc.r, idlc.i)
+
+
+idlconvert(t::T) where T <: JL_SCALAR = t
+idlconvert(t::IDL_STRING) = convert(String, t)
