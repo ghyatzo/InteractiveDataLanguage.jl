@@ -17,7 +17,7 @@ mutable struct IDLArray{T, N} <: AbstractArray{T, N}
 
 		_arr = unsafe_load(v._v.value.arr)
 		N = unsafe_load(_arr.n_dim) % Int
-		T = typeof(v)
+		T = eltype(v)
 
 		x = new{T, N}(_arr, inheriteddata)
 
@@ -39,10 +39,17 @@ Base.getproperty(X::IDLArray, f::Symbol) = begin
 end
 
 Base.isassigned(X::IDLArray, ::Integer) = isvalidref(X)
-Base.isassigned(X::IDLArray, I...) = isvalidref(X)
+Base.isassigned(X::IDLArray, ::Vararg{Integer}) = isvalidref(X)
 
 _dataptr(X::IDLArray{T, N}) where {T, N} = begin
 	X.dataoverride == C_NULL ? Ptr{T}(unsafe_load(X._arr.data)) : Ptr{T}(X.dataoverride)
+end
+
+_rowcolperm(I::NTuple{N, Int}) where {N} = ntuple(N) do j
+	N == 1 && return I[1]
+	j == 1 && return I[2]
+	j == 2 && return I[1]
+	return I[j]
 end
 
 setcallback!(X::IDLArray, cb) = begin
@@ -56,19 +63,7 @@ Base.eltype(::IDLArray{T, N}) where {T, N} = T
 Base.length(X::IDLArray) = unsafe_load(X._arr.n_elts)
 
 
-
-_rowcolperm(I::NTuple{N, Int}) where {N} = ntuple(N) do j
-	N == 1 && return I[1]
-	j == 1 && return I[2]
-	j == 2 && return I[1]
-	return I[j]
-end
-
-Base.getindex(X::IDLArray, I...) = begin
-	@boundscheck checkbounds(X, I...)
-	@inbounds getindex(X, _rowcolperm(I)...)
-end
-Base.getindex(X::IDLArray, i) = begin
+Base.getindex(X::IDLArray{T, N}, i::Integer) where {T, N} = begin
 	@boundscheck checkbounds(X, i)
 	__inbound_getindex(X, i)
 end
@@ -76,12 +71,6 @@ __inbound_getindex(X::IDLArray, i) = unsafe_load(_dataptr(X), i)
 __inbound_getindex(X::IDLArray{IDL_STRING}, i::Integer) = IDL_STRING_STR(unsafe_load(_dataptr(X), i))
 
 
-
-
-Base.setindex!(X::IDLArray, v, I...) = begin
-	@boundscheck checkbounds(X, I...)
-	@inbounds setindex!(X, v, _rowcolperm(I)...)
-end
 Base.setindex!(X::IDLArray, v, i) = begin
 	@boundscheck checkbounds(X, i)
 	__inbound_setindex!(X, v, i)
