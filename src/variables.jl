@@ -48,6 +48,13 @@ makevar(_v::Ptr{IDL_VARIABLE}) = begin
 
 	IDLVariable(_v)
 end
+
+# delete(v::IDLVariable) = begin
+# 	IDL_Delvar(v._v)
+
+
+# end
+
 flags(v::IDLVariable) = unsafe_load(v._v.flags)
 
 # const variables should not be changed. not enforced by IDL.
@@ -60,12 +67,26 @@ isfile(v::IDLVariable) = (flags(v) & IDL_V_FILE) != 0
 isdynamic(v::IDLVariable) = (flags(v) & IDL_V_DYNAMIC) != 0
 isstruct(v::IDLVariable) = (flags(v) & IDL_V_STRUCT) != 0
 isscalar(v::IDLVariable) = !isarray(v) && !IDL.isfile(v)
+issimplearray(v::IDLVariable) = isarray(v) && !isstruct(v)
 Base.isnothing(v::IDLVariable) = (flags(v) & IDL_V_NULL) != 0
 
-Base.eltype(v::IDLVariable) = begin
+_type(v::IDLVariable) = unsafe_load(v._v.type)
+scalar_eltype(v::IDLVariable) = begin
 	# TODO: check if array of struct
-	jltype(unsafe_load(v._v.type))
+	jltype(_type(v))
 end
+
+isvalid(v::IDLVariable) = _type(v) != IDL_TYP_UNDEF
+checkvalid(v::IDLVariable) = isvalid(v) || throw(UndefVarError(:v, "IDL"))
+array(v::IDLVariable) = checkvalid(v) && unsafe_load(v._v.value.arr)
+
+structdef(v::IDLVariable) = checkvalid(v) && v._v.value.s
+scalar(v::IDLVariable) = begin
+	checkvalid(v)
+	t = _type(v)
+	getproperty(v._v.value, _alltypes_sym(t))
+end
+
 
 # make temporary variables
 maketemp() = makevar(IDL_Gettmp(Cvoid))
