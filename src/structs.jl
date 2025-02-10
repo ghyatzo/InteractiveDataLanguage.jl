@@ -54,9 +54,10 @@ function _make_tag(sref::IDL_SREF, i::Int, _data)
 		return StructTag(innersref, _data, offset)
 	end
 
-	T = jl_type(tagvar_t)
+	T = jltype(tagvar_t)
 
 	(tagvar_f & IDL_V_ARR != 0) && begin
+
 		arr = unsafe_load(unsafe_load(_tagvar.value.arr))
 		return StructTag(arr, T, _data, offset)
 	end
@@ -128,6 +129,8 @@ _clone_tag(s::StructTag{T}, _newdataroot::Ptr) where T <: IDLStruct = begin
 	StructTag(sref, _newdataroot, offset)
 end
 
+
+## Efficiently create a new structure, using an already existing structure
 function IDLStruct(
 	s::IDLStruct{N, L, T, n}, _dataptr::Ptr{UInt8}
 ) where {N, L, T, n}
@@ -140,7 +143,6 @@ function IDLStruct(
 
 	return IDLStruct{N, L, T, n}(s.sref, values, _dataptr)
 end
-
 
 
 function IDLStruct{N, L, T, n}(values...) where {N, L, T, n}
@@ -183,6 +185,13 @@ function Base.getproperty(s::IDLStruct{N, L, T, n}, f::Symbol) where {N, L, T, n
 
 	return gettag(s.tags[i])
 end
+
+
+
+
+
+
+
 
 function Base.show(io::IO, s::IDLStruct{N, L, T, n}) where {N, L, T, n}
 

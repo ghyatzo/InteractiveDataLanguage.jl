@@ -28,7 +28,7 @@ end
 	@testset "Simple Struct" begin
 		simple_idl_struct = "{TAG1:1, TAG2: 2L, TAG3: 3.0D, TAG4: COMPLEX(42, 42)}"
 		IDL.execute("s = $simple_idl_struct")
-		s = IDL.get_var("s")
+		s = IDL.getvar("s")
 
 		@test IDL.ntags(s) == 4
 		@test Base.nameof(s) == Symbol()
@@ -46,7 +46,7 @@ end
 		idl_struct_with_array = "{TESTSTRUCT, ARR:[42, 69], ARR2:[1.0, 2.0]}"
 
 		IDL.execute("s = $idl_struct_with_array")
-		s = IDL.get_var("s")
+		s = IDL.getvar("s")
 
 		@test IDL.ntags(s) == 2
 		@test Base.nameof(s) == :TESTSTRUCT
@@ -65,7 +65,7 @@ end
 	@testset "Nested Structs" begin
 		nested_struct = "{OUTER, NESTED:{INNER, TAG1:42, TAG2:[1,2]}}"
 		IDL.execute("s = $nested_struct")
-		s = IDL.get_var("s")
+		s = IDL.getvar("s")
 
 		@test IDL.ntags(s) == 1
 		@test Base.nameof(s) == :OUTER
@@ -93,7 +93,7 @@ end
 	@testset "Array of structs" begin
 		sa_string = "[{A:1, B:2}, {A:4, B:10}]"
 		IDL.execute("s = $sa_string")
-		sa = IDL.get_var("s")
+		sa = IDL.getvar("s")
 
 		@test length(sa) == 2
 		@test typeof(first(sa)) == typeof(last(sa))
@@ -120,7 +120,7 @@ end
 # IDL.IDL_ExecuteStr("arr = intarr(3,3,3)")
 # 0
 
-# julia> arr = IDL.get_var("arr")
+# julia> arr = IDL.getvar("arr")
 # 3×3×3 SizedArray{Tuple{3, 3, 3}, Int16, 3, 3, Array{Int16, 3}} with indices SOneTo(3)×SOneTo(3)×SOneTo(3):
 # [:, :, 1] =
 #  0  0  0

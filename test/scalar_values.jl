@@ -4,7 +4,7 @@
 	@testset "UInt8" begin
 		execute("var = 5B")
 
-		var = IDL.get_var("var")
+		var = IDL.getvar("var")
 
 		@test var isa UInt8
 		@test var == 0x05
@@ -16,8 +16,8 @@
 		execute("var = 5S")
 		execute("varu = 5US")
 
-		var = IDL.get_var("var")
-		varu = IDL.get_var("varu")
+		var = IDL.getvar("var")
+		varu = IDL.getvar("varu")
 
 		@test varu isa UInt16
 		@test varu == UInt16(5)
@@ -32,8 +32,8 @@
 		execute("var = 5L")
 		execute("varu = 5UL")
 
-		var = IDL.get_var("var")
-		varu = IDL.get_var("varu")
+		var = IDL.getvar("var")
+		varu = IDL.getvar("varu")
 
 		@test varu isa UInt32
 		@test varu == UInt32(5)
@@ -48,8 +48,8 @@
 		execute("var = 5LL")
 		execute("varu = 5ULL")
 
-		var = IDL.get_var("var")
-		varu = IDL.get_var("varu")
+		var = IDL.getvar("var")
+		varu = IDL.getvar("varu")
 
 		@test varu isa UInt64
 		@test varu == UInt64(5)
@@ -63,7 +63,7 @@
 	@testset "Float32" begin
 		execute("var = 5.0")
 
-		var = IDL.get_var("var")
+		var = IDL.getvar("var")
 
 		@test var isa Float32
 		@test var == Float32(5)
@@ -74,7 +74,7 @@
 	@testset "Float64" begin
 		execute("var = 5.0D")
 
-		var = IDL.get_var("var")
+		var = IDL.getvar("var")
 
 		@test var isa Float64
 		@test var == Float64(5)
@@ -85,7 +85,7 @@
 	@testset "ComplexF32" begin
 		execute("var = COMPLEX(69.0, 42.0)")
 
-		var = IDL.get_var("var")
+		var = IDL.getvar("var")
 
 		@test var isa ComplexF32
 		@test var == ComplexF32(69.0, 42.0)
@@ -96,7 +96,7 @@
 	@testset "ComplexF64" begin
 		execute("var = DCOMPLEX(69.0, 42.0)")
 
-		var = IDL.get_var("var")
+		var = IDL.getvar("var")
 
 		@test var isa ComplexF64
 		@test var == ComplexF64(69.0, 42.0)
@@ -107,7 +107,7 @@
 	@testset "Strings" begin
 		execute("var = 'Hello!'")
 
-		var = IDL.get_var("var")
+		var = IDL.getvar("var")
 
 		@test var isa String
 		@test var == "Hello!"
@@ -120,8 +120,8 @@ end
 	@testset "UInt8" begin
 		var = 0x05
 
-		_var = IDL.put_var(var, "var")
-		varvar = IDL.get_var("var")
+		_var = IDL.putvar(var, "var")
+		varvar = IDL.getvar("var")
 
 		@test varvar isa UInt8
 		@test varvar == var
@@ -133,11 +133,11 @@ end
 		var = Int16(5)
 		varu = UInt16(5)
 
-		_var = IDL.put_var(var, "var")
-		_varu = IDL.put_var(varu, "varu")
+		_var = IDL.putvar(var, "var")
+		_varu = IDL.putvar(varu, "varu")
 
-		varvar = IDL.get_var("var")
-		varvaru = IDL.get_var("varu")
+		varvar = IDL.getvar("var")
+		varvaru = IDL.getvar("varu")
 
 		@test varvar isa Int16
 		@test varvar == var
@@ -152,11 +152,11 @@ end
 		var = Int32(5)
 		varu = UInt32(5)
 
-		_var = IDL.put_var(var, "var")
-		_varu = IDL.put_var(varu, "varu")
+		_var = IDL.putvar(var, "var")
+		_varu = IDL.putvar(varu, "varu")
 
-		varvar = IDL.get_var("var")
-		varvaru = IDL.get_var("varu")
+		varvar = IDL.getvar("var")
+		varvaru = IDL.getvar("varu")
 
 		@test varvar isa Int32
 		@test varvar == var
@@ -171,11 +171,11 @@ end
 		var = Int64(5)
 		varu = UInt64(5)
 
-		_var = IDL.put_var(var, "var")
-		_varu = IDL.put_var(varu, "varu")
+		_var = IDL.putvar(var, "var")
+		_varu = IDL.putvar(varu, "varu")
 
-		varvar = IDL.get_var("var")
-		varvaru = IDL.get_var("varu")
+		varvar = IDL.getvar("var")
+		varvaru = IDL.getvar("varu")
 
 		@test varvar isa Int64
 		@test varvar == var
@@ -189,8 +189,8 @@ end
 	@testset "Float32" begin
 		var = Float32(5)
 
-		_var = IDL.put_var(var, "var")
-		varvar = IDL.get_var("var")
+		_var = IDL.putvar(var, "var")
+		varvar = IDL.getvar("var")
 
 		@test varvar isa Float32
 		@test varvar == var
@@ -201,8 +201,8 @@ end
 	@testset "Float64" begin
 		var = Float64(5)
 
-		_var = IDL.put_var(var, "var")
-		varvar = IDL.get_var("var")
+		_var = IDL.putvar(var, "var")
+		varvar = IDL.getvar("var")
 
 		@test varvar isa Float64
 		@test varvar == var
@@ -213,8 +213,8 @@ end
 	@testset "ComplexF32" begin
 		var = ComplexF32(5)
 
-		_var = IDL.put_var(var, "var")
-		varvar = IDL.get_var("var")
+		_var = IDL.putvar(var, "var")
+		varvar = IDL.getvar("var")
 
 		@test varvar isa ComplexF32
 		@test varvar == var
@@ -225,8 +225,8 @@ end
 	@testset "ComplexF64" begin
 		var = ComplexF64(5)
 
-		_var = IDL.put_var(var, "var")
-		varvar = IDL.get_var("var")
+		_var = IDL.putvar(var, "var")
+		varvar = IDL.getvar("var")
 
 		@test varvar isa ComplexF64
 		@test varvar == var
@@ -237,8 +237,8 @@ end
 	@testset "Strings" begin
 		var = "Hello!"
 
-		_var = IDL.put_var(var, "var")
-		varvar = IDL.get_var("var")
+		_var = IDL.putvar(var, "var")
+		varvar = IDL.getvar("var")
 
 		@test varvar isa String
 		@test varvar == var
