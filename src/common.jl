@@ -6,7 +6,12 @@ reset() = execute(".reset_session")
 full_reset() = execute(".full_reset_session")
 dotrun(filename::AbstractString) = execute(".run $filename")
 
-
+# three directions of interaction
+# * getting and IDL variable into julia:
+#	- get just the value of the IDL variable
+#	- get a reference to it
+# * storing a julia variable into IDL: IDL References julia memory
+# * create an IDL variable from julia: Julia initializes IDL memory
 
 ###=== IDL -> JULIA ===###
 
@@ -17,46 +22,24 @@ function getvar(name::AbstractString)
 	if _var == C_NULL
 		throw(UndefVarError("No variable named '$name' in the current IDL scope."))
 	end
-	var_f, var_t = varinfo(_var)
 
-	if (var_f & IDL_V_NULL) != 0
-		return nothing
-	end
-
-	if (var_f & IDL_V_FILE) != 0
-		error("File Variables not yet implemented")
-	end
-
-	(var_t == IDL_TYP_PTR || var_t == IDL_TYP_OBJREF) &&
-		error("Getting variables of type IDL_TYP_PTR or IDL_TYP_OBJREF is not supported.")
-
-	T = jltype(var_t)
-	getvar(T, var_f, _var)
-end
-
-function getvar(::Type{T}, var_f, _var::Ptr{IDL_VARIABLE}) where T
-
-	if (var_f & IDL_V_ARR) != 0
+	var = makevar(_var)
+	isstruct(var) && return begin
+		# IDL_V_STRUCT implies IDL_V_ARR
+		# IDL Structures are really only Arrays of structures with only one element.
+		sref = unsafe_load(_var.value.s)
 		arr = unsafe_load(unsafe_load(_var.value.arr))
-		ndims = arr.n_dim % Int
 
-		if (var_f & IDL_V_STRUCT) != 0
-			# IDL_V_STRUCT implies IDL_V_ARR
-			# IDL Structures are really only Arrays of structures with only one element.
-			sref = unsafe_load(_var.value.s)
-
-			s = IDLStruct(sref)
-		 	# Array of structs in IDL are a mix between SoA and AoS...
-		 	# The memory layout is like an AoS with all values inlined in the same array
-		 	# in order, but the first struct defines the type of struct all other structs
-		 	# will have to be consistent with.
-			return _maybe_struct_array(s, arr)
-		end
-		array = IDLArray{T, ndims}(arr, C_NULL)
-		return PermutedDimsArray(array, dimsperm(length(size(array))))
+		s = IDLStruct(sref)
+	 	# Array of structs in IDL are a mix between SoA and AoS...
+	 	# The memory layout is like an AoS with all values inlined in the same array
+	 	# in order, but the first struct defines the type of struct all other structs
+	 	# will have to be consistent with.
+		return _maybe_struct_array(s, arr)
 	end
 
-	return get_scalarvar(_var)
+	isarray(var) && return IDLArray(var)
+
 end
 
 function _maybe_struct_array(s::IDLStruct{N, L, T, n}, arr::IDL_ARRAY) where {N, L, T, n}
@@ -168,17 +151,17 @@ JL_TAG_DEF(name, x) = throw(ArgumentError("""
 """))
 
 function JL_TAG_DEF(name, ::T) where T <: JL_SCALAR
-	JL_TAG_DEF(name, SVector{9}(0,0,0,0,0,0,0,0,0), idl_type(T))
+	JL_TAG_DEF(name, SVector{9}(0,0,0,0,0,0,0,0,0), idltype(T))
 end
 
 function JL_TAG_DEF(name, value::AbstractArray{T, N}) where {T<:JL_SCALAR, N}
 	N > 8 && throw(ArgumentError("IDL supports at most 8-dimensional arrays"))
-	JL_TAG_DEF(name, SVector{9}(N, size(value)..., zeros(Int, 8-N)...), idl_type(T))
+	JL_TAG_DEF(name, SVector{9}(N, size(value)..., zeros(Int, 8-N)...), idltype(T))
 end
 
 function JL_TAG_DEF(name, value::NTuple{T, N}) where {T<:JL_SCALAR, N}
 	N > 8 && throw(ArgumentError("IDL supports at most 8-dimensional arrays"))
-	JL_TAG_DEF(name, SVector{9}(N, size(value)..., zeros(Int, 8-N)...), idl_type(T))
+	JL_TAG_DEF(name, SVector{9}(N, size(value)..., zeros(Int, 8-N)...), idltype(T))
 end
 
 function JL_TAG_DEF(name, value::Union{<:NamedTuple, <:DataType})
@@ -250,8 +233,8 @@ struct JL_ARRAY_ROOT
 	dataref::Ref
 end
 
-function putvar(jlarr::AbstractArray{T, N}, name::AbstractString) where {T <: JL_SCALAR, N}
-	idl_var_t = idl_type(T)
+function putvar(jlarr::AbstractArray{T, N}, name::AbstractString) where {T <: Union{JL_SCALAR, IDL_STRING}, N}
+	idl_var_t = idltype(T)
 
 	N > 8 && throw(ArgumentError("IDL Arrays can have at most 8 dimensions."))
 
@@ -306,15 +289,13 @@ function putvar(jlvar::T, name::AbstractString) where T <: JL_SCALAR
 
 		else
 
-			all_t_sym = T |> idl_type |> idl_alltypes_symbol
-			setproperty!(_all_t, all_t_sym, jlvar)
+			setproperty!(_all_t, _alltypes_sym(idltype(T)), jlvar)
 
 		end
 
 	end
 
-	idl_var_t = idl_type(T)
-	IDL_StoreScalar(_idl_var, idl_var_t, all_t)
+	IDL_StoreScalar(_idl_var, idltype(T), all_t)
 
 	return _idl_var
 end
