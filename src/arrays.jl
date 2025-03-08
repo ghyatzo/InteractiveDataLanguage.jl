@@ -1,76 +1,76 @@
-ndims(_a::Ptr{IDL_ARRAY}) = unsafe_load(_a.n_dim) % Int
-Base.size(_a::Ptr{IDL_ARRAY}) = unsafe_load(_a.dim)[1:ndims(_a)]
-Base.elsize(_a::Ptr{IDL_ARRAY}) = unsafe_load(_a.elt_len)
-Base.length(_a::Ptr{IDL_ARRAY}) = unsafe_load(_a.n_elts)
-data(_a::Ptr{IDL_ARRAY}) = unsafe_load(_a.data)
+_ndims(_a::Ptr{IDL_ARRAY}) = unsafe_load(_a.n_dim) % Int
+_size(_a::Ptr{IDL_ARRAY}) = unsafe_load(_a.dim)[1:_ndims(_a)]
+# we should return 1 for the dimensions without values, but IDL
+# already enforces this.
+_size(_a::Ptr{IDL_ARRAY}, d::Integer) = d <= 8 ? unsafe_load(Ptr{Int}(_a.dim), d) : 0
+_elsize(_a::Ptr{IDL_ARRAY}) = unsafe_load(_a.elt_len)
+_length(_a::Ptr{IDL_ARRAY}) = unsafe_load(_a.n_elts)
+_data(_a::Ptr{IDL_ARRAY}) = unsafe_load(_a.data)
 _store_cb!(_a::Ptr{IDL_ARRAY}, cb::Base.CFunction) =
 	unsafe_store!(_a.free_cb, Base.unsafe_convert(Ptr{Cvoid}, cb))
 
-mutable struct IDLArray
-	parent::IDLVariable
-	valid::Bool # make atomic in the future
+mutable struct UnsafeArrayView
+	v::Variable
 	offset::UInt
-	_cb::Base.CFunction
 
-	function IDLArray(v::IDLVariable, offset = zero(UInt8))
+	function UnsafeArrayView(v::Variable, offset = zero(UInt8))
 		isarray(v) || throw(ArgumentError("The variable must point to an IDL Array."))
-
-		x = new(v, true, offset)
-
-		x._cb = @cfunction($((_p::Ptr{Cuchar}) -> begin
-
-			if !isvalid(x.parent)
-				x.valid = false
-			end
-
-			# is array but not a struct.
-			if !issimplearray(x.parent)
-				x.valid = false
-			end
-
-			if x.valid
-				_store_cb!(array(x.parent), x._cb)
-			end
-
-			return nothing
-		end), Nothing, (Ptr{Cuchar},))
-
-		_store_cb!(array(x.parent), x._cb)
+		return new(v, offset)
 	end
 end
-deconstruct(x::IDLArray) = x.parent
-array(x::IDLArray) = array(x.parent)
-isvalid(x::IDLArray) = x.valid
+unwrap(x::UnsafeArrayView) = x.v
+_array(x::UnsafeArrayView) = _array(x.v)
+isvalid(x::UnsafeArrayView) = isvalid(x.v) && isarray(x.v)
 
-Base.IndexStyle(::IDLArray) = IndexLinear()
-Base.eltype(x::IDLArray) = jltype(_type(x.parent))
-Base.size(x::IDLArray) = size(array(x))
-Base.length(x::IDLArray) = length(array(x))
+Base.IndexStyle(::UnsafeArrayView) = IndexCartesian()
+Base.eltype(x::UnsafeArrayView) = jltype(_type(x.v))
+Base.size(x::UnsafeArrayView) = _size(_array(x))
+Base.size(x::UnsafeArrayView, d) = _size(_array(x), d)
+Base.length(x::UnsafeArrayView) = _length(_array(x))
+Base.ndims(x::UnsafeArrayView) = _ndims(_array(x))
+Base.keys(x::UnsafeArrayView) = ndims(x) > 1 ? CartesianIndices(axes(x)) : LinearIndices(Base.axes1(x))
+Base.firstindex(x::UnsafeArrayView) = 1
+Base.lastindex(x::UnsafeArrayView) = length(x)
 
-data(x::IDLArray) = begin
+data(x::UnsafeArrayView) = begin
 	isvalid(x) ||
 		throw(InvalidStateException("""The variable no longer points to an array.
 			To keep using this variable extract the underlaying variable by calling
-			the `deconstruct` method.""", :IDLArray))
-	Ptr{eltype(x)}(data(array(x)) + x.offset)
+			the `unwrap` method.""", :UnsafeArrayView))
+	Ptr{eltype(x)}(_data(_array(x)) + x.offset)
 end
 
-setcallback!(x::IDLArray, cb) = begin
-	newcb = @cfunction($cb, Nothing, (Ptr{Cuchar},))
-	x._cb = newcb
-	_store_cb!(array(x.parent), x._cb)
+function Base.iterate(x::UnsafeArrayView, state=(eachindex(x),))
+    y = Base.iterate(state...)
+    y === nothing && return nothing
+    x[y[1]], (state[1], Base.tail(y)...)
 end
 
-Base.isassigned(x::IDLArray, ::Integer) = isvalid(x)
-Base.isassigned(x::IDLArray, ::Vararg{Integer}) = isvalid(x)
+Base.isassigned(x::UnsafeArrayView, ::Integer) = isvalid(x)
+Base.isassigned(x::UnsafeArrayView, ::Vararg{Integer}) = isvalid(x)
 
-Base.getindex(x::IDLArray, i::Integer) = begin
+# FIXME, the passed in tuple must match the number of axes!
+Base.checkbounds(::Type{Bool}, x::UnsafeArrayView, I...) = Base.checkbounds_indices(Bool, axes(x), I)
+Base.checkbounds(x::UnsafeArrayView, I...) = Base.checkbounds(Bool, x, I...) || throw(BoundsError(x, I))
+
+Base.checkbounds(::Type{Bool}, x::UnsafeArrayView, i) = Base.checkindex(Bool, Base.OneTo(length(x)), i)
+Base.checkbounds(x::UnsafeArrayView, i::Int) = Base.checkbounds(Bool, x, i) || throw(BoundsError(x, i))
+
+Base.getindex(x::UnsafeArrayView, i::Integer) = begin
 	@boundscheck checkbounds(x, i)
 	idlconvert(unsafe_load(data(x), i))
 end
 
+Base.getindex(x::UnsafeArrayView, I...) = begin
+	_getindex(x, to_indices(x, I)...)
+end
 
-Base.setindex!(x::IDLArray, v::T, i) where T <: JL_SCALAR = begin
+_getindex(x::UnsafeArrayView, I...) = begin
+	@boundscheck checkbounds(x, I...)
+	@inbounds getindex(x, Base._sub2ind(axes(x), I...))
+end
+
+Base.setindex!(x::UnsafeArrayView, v::T, i) where T <: JL_SCALAR = begin
 	@boundscheck checkbounds(x, i)
 	T == eltype(x) ||
 		throw(ArgumentError("Attempting to add an element of type $T to an array of $(eltype(x))s"))
@@ -78,7 +78,7 @@ Base.setindex!(x::IDLArray, v::T, i) where T <: JL_SCALAR = begin
 	unsafe_store!(data(x), v, i)
 end
 
-Base.setindex!(x::IDLArray, v::AbstractString, i) = begin
+Base.setindex!(x::UnsafeArrayView, v::AbstractString, i) = begin
 	@boundscheck checkbounds(x, i)
 
 	eltype(x) == String ||
@@ -87,14 +87,46 @@ Base.setindex!(x::IDLArray, v::AbstractString, i) = begin
 	IDL_StrStore(data(x) + (sizeof(IDL_STRING) * (Int(i) - 1)), v)
 end
 
+Base.setindex!(x::UnsafeArrayView, v, I...) = begin
+	_setindex!(x, v, to_indices(x, I)...)
+end
+
+_setindex!(x::UnsafeArrayView, v, I...) = begin
+	@boundscheck checkbounds(x, I...)
+	@inbounds setindex!(x, v, Base._sub2ind(axes(x), I...))
+end
 
 
-# mutable struct IDLArray{T, N} <: AbstractArray{T, N}
+
+
+
+# idldims(d::Vararg{Integer}) = begin
+# 	nd = length(d)
+# 	nd > 8 && throw(ArgumentError("IDL Arrays support at most 8 dimensions."))
+
+# 	dims = ones(8)
+# 	dims[1:nd] .= d
+# 	return dims
+# end
+
+# idlzeros(T::Type, D::Vararg{Integer}) = begin
+# 	_tmp = IDL_Gettmp()
+# 	IDL_MakeTempArray(idltype(T), length(D), idldims(D...), IDL_ARR_INI_ZERO, _tmp)
+# 	_v = IDL_GetVarAddr1(idlgensym(), IDL_TRUE)
+# 	IDL_VarCopy(_tmp, _v)
+# 	UnsafeArrayView(Variable(_v))
+# end
+# idlzeros(D::Vararg{Integer}) = idlzeros(Float64, D...)
+
+
+
+
+# mutable struct UnsafeArrayView{T, N} <: AbstractArray{T, N}
 # 	_arr::Ptr{IDL_ARRAY}
 # 	dataoverride::Ptr{Cuchar}
 # 	_customcb::Base.CFunction
 
-# 	function IDLArray(v::IDLVariable, inheriteddata = C_NULL)
+# 	function UnsafeArrayView(v::Variable, inheriteddata = C_NULL)
 # 		isarray(v) || throw(ArgumentError("The variable must point to an IDL Array."))
 
 # 		_arr = unsafe_load(v._v.value.arr)
@@ -103,7 +135,7 @@ end
 
 # 		x = new{T, N}(_arr, inheriteddata)
 
-# 		# The default callback invalidates the IDLArray
+# 		# The default callback invalidates the UnsafeArrayView
 # 		x._customcb = @cfunction($((_p::Ptr{Cuchar}) -> begin
 # 			setfield!(x, :_arr, Ptr{IDL_ARRAY}(C_NULL))
 # 			nothing
@@ -117,7 +149,7 @@ end
 
 
 
-# _dataptr(x::IDLArray{T, N}) where {T, N} = begin
+# _dataptr(x::UnsafeArrayView{T, N}) where {T, N} = begin
 # 	x.dataoverride == C_NULL ? Ptr{T}(unsafe_load(x._arr.data)) : Ptr{T}(x.dataoverride)
 # end
 
