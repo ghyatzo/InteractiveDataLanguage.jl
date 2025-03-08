@@ -16,9 +16,9 @@ const IDL_SIMPLE_TYPES = [
 	Float64 => "D",
 ]
 
-# @testset "Scalar Values" begin
-# 	include("scalar_values.jl")
-# end
+@testset "Scalar Values" begin
+	include("scalar_values.jl")
+end
 
 @testset "Arrays" begin
 	include("arrays.jl")
