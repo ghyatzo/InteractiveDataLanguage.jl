@@ -29,8 +29,8 @@ jltype(::Val{IDL_TYP_COMPLEX}) = ComplexF32
 jltype(::Val{IDL_TYP_DCOMPLEX}) = ComplexF64
 jltype(::Val{IDL_TYP_STRING}) = String
 jltype(::Val{IDL_TYP_STRUCT}) = DataType # TODO...
-jltype(::Val{IDL_TYP_PTR}) = error("IDL pointers are not supported")
-jltype(::Val{IDL_TYP_OBJREF}) = error("IDL Objects are not supported")
+jltype(::Val{IDL_TYP_PTR}) = error("IDL pointers are not yet supported")
+jltype(::Val{IDL_TYP_OBJREF}) = error("IDL Objects are not yet supported")
 
 
 idltype(::Type{Nothing}) = IDL_TYP_UNDEF
@@ -47,8 +47,7 @@ idltype(::Type{ComplexF32}) = IDL_TYP_COMPLEX
 idltype(::Type{ComplexF64}) = IDL_TYP_DCOMPLEX
 idltype(::Type{String}) = IDL_TYP_STRING
 
-
-_alltypes_sym(t) = _alltypes_sym(Val(t))
+_alltypes_sym(t) = _alltypes_sym(Val(Int(t)))
 _alltypes_sym(::Val{IDL_TYP_BYTE}) = :c
 _alltypes_sym(::Val{IDL_TYP_INT}) = :i
 _alltypes_sym(::Val{IDL_TYP_UINT}) = :ui
@@ -64,7 +63,6 @@ _alltypes_sym(::Val{IDL_TYP_STRING}) = :str
 _alltypes_sym(::Val{IDL_TYP_STRUCT}) = :s
 _alltypes_sym(::Val{IDL_TYP_PTR}) = :hvid
 _alltypes_sym(::Val{IDL_TYP_OBJREF}) = :hvid
-
 
 
 Base.convert(::Type{String}, x::IDL_STRING) = IDL_STRING_STR(x)
