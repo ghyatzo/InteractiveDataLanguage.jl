@@ -13,9 +13,10 @@ const UCHAR = Cuchar
 
 const IDL_LONG = Clong
 
-struct IDL_ALLTYPES
-    data::NTuple{16, UInt8}
-end
+primitive type IDL_ALLTYPES 16 * 8 end
+# struct IDL_ALLTYPES
+#     data::NTuple{2, UInt64}
+# end
 
 function Base.getproperty(x::Ptr{IDL_ALLTYPES}, f::Symbol)
     f === :sc && return Ptr{Cchar}(x + 0)
@@ -52,29 +53,34 @@ function Base.setproperty!(x::Ptr{IDL_ALLTYPES}, f::Symbol, v)
 end
 
 # =-=-= CUSTOM ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# The structure defined in the header idl_export.h is Wrong????
-# There is an extra 6 byte padding between flags and value?
-# struct IDL_VARIABLE
-#     type::UCHAR
-#     flags::UCHAR
-#     flags2::UCHAR # internal. don't use.
-#     value::IDL_ALLTYPES
-# end
+# julia seems to ignore the hidden alignment padding.
+# There is an extra 6 byte padding between flags and value.
 
-# For some absurd fucking reason, IDL Variables have an undocumented
-# 6 byte pad between the flag byte and the value structure.
-# (at least on windows...)
+# SOLVED: The issue was in how Clang represent C unions
+# since NTuples align with respect to its eltype, while C unions
+# align wrt the biggest alignment of the union.
 struct IDL_VARIABLE
-    type::Cuchar
-    flags::Cuchar
-    pad::NTuple{6, UInt8}
+    type::UCHAR
+    flags::UCHAR
+    flags2::UCHAR # internal. don't use.
     value::IDL_ALLTYPES
 end
 
+# 5 byte pad between the flag byte and the value structure.
+# Word alignment of small fields.
+# struct IDL_VARIABLE
+#     type::Cuchar
+#     flags::Cuchar
+#     flags2::Cuchar
+#     pad::NTuple{5, UInt8}
+#     value::IDL_ALLTYPES
+# end
+
 function Base.getproperty(x::Ptr{IDL_VARIABLE}, f::Symbol)
-    f === :type && return Ptr{Cuchar}(x + 0)
-    f === :flags && return Ptr{Cuchar}(x + 1)
-    f === :value && return Ptr{IDL_ALLTYPES}(x + 8)
+    f === :type && return Ptr{Cuchar}(x + fieldoffset(IDL_VARIABLE, 1))
+    f === :flags && return Ptr{Cuchar}(x + fieldoffset(IDL_VARIABLE, 2))
+    f === :flags2 && return Ptr{Cuchar}(x + fieldoffset(IDL_VARIABLE, 3))
+    f === :value && return Ptr{IDL_ALLTYPES}(x + fieldoffset(IDL_VARIABLE, 4))
     return getfield(x, f)
 end
 
