@@ -1,4 +1,4 @@
-execute(str::AbstractString) = IDL.IDL_ExecuteStr(str)
+execute(str::AbstractString) = IDL_ExecuteStr(str)
 help() = execute("help")
 help(s::AbstractString) = execute("help, "*s)
 idlhelp(s::AbstractString) = execute("?"*s)
@@ -12,6 +12,55 @@ dotrun(filename::AbstractString) = execute(".run $filename")
 #	- get a reference to it
 # * storing a julia variable into IDL: IDL References julia memory
 # * create an IDL variable from julia: Julia initializes IDL memory
+
+
+
+##	- Create IDL variables from julia
+##		- Scalars (DONE)
+##		- Structures
+##		- arrays
+
+
+##	- Transform a JULIA variable into an IDL one
+##		- Scalars (DONE)
+##		- Structures
+## 		- copy array
+##		- no copy arrays
+
+
+##	- Transform an IDL variable into a JL one
+##  	- Scalars (DONE with convert)
+##  	- Structures
+##  	- Copy array (TODO with a subtype of abstractarray)
+##		- no copy array (DONE with UnsafeArrayView)
+
+
+
+## PROTOTYPE FOR THE API
+
+# ## Scalars
+# # get the variable
+# IDL.get(:A)
+# # put the value in the variable
+# IDL.put(:A, 2)
+# IDL.put(idlvar, 10)
+
+
+# ## Arrays
+# # Get the array held by the variable :A
+# IDL.array(:A)
+# # Get a view of the array held by the variable :A
+# IDL.arrayview(:A)
+
+# # create an array with julia data
+# IDL.array(:A, [1, 2, 3])
+
+
+
+# ## Get the variable as a struct:
+# IDL.struct(:A)
+
+
 
 ###=== IDL -> JULIA ===###
 
@@ -56,27 +105,6 @@ function _maybe_struct_array(s::IDLStruct{N, L, T, n}, arr::IDL_ARRAY) where {N,
 		push!(array, IDLStruct(s, s.ptr + offset))
 	end
 	return reshape(array, arr.dim[1:Int(arr.n_dim)])
-end
-
-
-function get_scalarvar(_var::Ptr{IDL_VARIABLE})
-	var_f, var_t = varinfo(_var)
-
-	(var_f & IDL_V_NOT_SCALAR) != 0 &&
-		error("the variable is not scalar!")
-
-	var_t == IDL_TYP_STRING &&
-		return unsafe_string(IDL_VarGetString(_var))
-
-	_n 		= Ref{IDL_MEMINT}()
-	__data 	= Ref{Ptr{Cchar}}()
-	IDL_VarGetData(_var, _n, __data, IDL_TRUE)
-
-	if (var_f & IDL_V_BOOLEAN) != 0
-		return unsafe_load(convert(Ptr{Bool}, __data[]))
-	else
-		return unsafe_load(convert(Ptr{jltype(var_t)}, __data[]))
-	end
 end
 
 
@@ -270,40 +298,3 @@ function putvar(jlarr::AbstractArray{T, N}, name::AbstractString) where {T <: Un
 
 	return _var
 end
-
-function putvar(jlvar::T, name::AbstractString) where T <: JL_SCALAR
-	# get or create new variable with defined name
-	_idl_var = IDL_GetVarAddr1(name, IDL_TRUE)
-
-	all_t = Ref{IDL_ALLTYPES}()
-
-	GC.@preserve all_t begin
-
-		_all_t = Base.unsafe_convert(Ptr{IDL_ALLTYPES}, all_t)
-
-		if T <: AbstractString
-
-			GC.@preserve jlvar begin
-				IDL_StrStore(_all_t.str, pointer(jlvar))
-			end
-
-		else
-
-			setproperty!(_all_t, _alltypes_sym(idltype(T)), jlvar)
-
-		end
-
-	end
-
-	IDL_StoreScalar(_idl_var, idltype(T), all_t)
-
-	return _idl_var
-end
-
-
-
-# utilities
-
-
-name(_idlvar::IDL_VPTR) = IDL_VarName(_idlvar) |> unsafe_string |> Symbol
-# reset_session() = idl".reset_session"

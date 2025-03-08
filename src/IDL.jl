@@ -66,7 +66,6 @@ free_jl_array_ref(_p::Ptr{Cuchar}) = begin
     nothing
 end
 const FREE_JLARR = Ref{Ptr{Cvoid}}()
-const IDL_DATA_FREED = Ref{Ptr{Cvoid}}()
 
 preserve_ref(_x::Ptr, x::Ref) = begin
     JL_REF_HOLDING[_x] = x
