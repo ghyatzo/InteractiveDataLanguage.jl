@@ -1,10 +1,19 @@
-execute(str::AbstractString) = IDL_ExecuteStr(str)
+execute(string::AbstractString) = begin
+	# remove comments and coalesce line breaks
+	string = replace(replace(string, r";.*" => ""), r"\$\s*\n" => "")
+	iostring = IOBuffer(string)
+	for line in eachline(iostring)
+		execute(line)
+	end
+end
 help() = execute("help")
 help(s::AbstractString) = execute("help, "*s)
 idlhelp(s::AbstractString) = execute("?"*s)
 reset() = execute(".reset_session")
 full_reset() = execute(".full_reset_session")
 dotrun(filename::AbstractString) = execute(".run $filename")
+
+
 
 # three directions of interaction
 # * getting and IDL variable into julia:
@@ -32,7 +41,7 @@ dotrun(filename::AbstractString) = execute(".run $filename")
 ##  	- Scalars (DONE with convert)
 ##  	- Structures
 ##  	- Copy array (TODO with a subtype of abstractarray)
-##		- no copy array (DONE with UnsafeArrayView)
+##		- no copy array (DONE with ArrayView)
 
 
 
