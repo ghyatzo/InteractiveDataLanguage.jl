@@ -31,6 +31,8 @@ varflags(_var::Ptr{IDL_VARIABLE}) = unsafe_load(_var.flags)
 vartype(_var::Ptr{IDL_VARIABLE}) = unsafe_load(_var.type)
 varinfo(_var::Ptr{IDL_VARIABLE}) = (varflags(_var), vartype(_var))
 
+const ALL_T = Ref{IDL_ALLTYPES}()
+
 mutable struct Variable
 	_v::Ptr{IDL_VARIABLE}
 
@@ -167,12 +169,10 @@ var(name::Symbol) = begin
 end
 
 _store_scalar!(_var::Ptr{IDL_VARIABLE}, x::T) where {T<:JL_SCALAR} = begin
-	all_t = Ref{IDL_ALLTYPES}()
-	GC.@preserve all_t begin
-		_all_t = Base.unsafe_convert(Ptr{IDL_ALLTYPES}, all_t)
-		setproperty!(_all_t, _alltypes_sym(idltype(T)), x)
-	end
-	IDL_StoreScalar(_var, idltype(T), all_t)
+	@inline
+	_all_t = Base.unsafe_convert(Ptr{IDL_ALLTYPES}, ALL_T)
+	setproperty!(_all_t, _alltypes_sym(idltype(T)), x)
+	IDL_StoreScalar(_var, idltype(T), _all_t)
 end
 
 var(name::Symbol, x::T) where {T <: JL_SCALAR} = begin
