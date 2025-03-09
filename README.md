@@ -4,7 +4,7 @@ The `IDL.jl` package is an interface for calling IDL from the Julia language.
 You must have a valid IDL license to use IDL from Julia.
 
 > [!WARN]
-> This package is still in the experimental phase, expect changes in the wrapper types.
+> This package is still in the experimental phase, expect frequent changes.
 
 This package started with an attempt to revive the code from [this package](https://github.com/henry2004y/IDL.jl) which was a fork of [this other package](https://github.com/BobPortmann/IDLCall.jl). But it turned into a complete rewrite.
 
@@ -16,44 +16,104 @@ Within Julia, use the package manager:
 ```
 
 > [!NOTE]
-> `IDL.jl` should find and load the IDL library automatically. It has not been tested on Mac and/or Linux so please file an issue if you encounter errors.
+> `IDL.jl` should find and load the IDL library automatically. It has not been tested on Mac and/or Linux so please file an issue if you encounter errors. For the automatic discovery IDL should be in the PATH.
 
 IDL can be called externally using either the `RPC` or `Callable` interface.
 This library opted to only support the `Callable` IDL interface due to better ergonomics
 and power when managing memory between IDL and Julia.
 
-## Quickstart
+## TODO
+Currently the package is in very early stages of development, the API is still in the process of being fleshed out.
+
+Current support:
+[x] Scalars
+	[x] IDL -> Julia
+	[x] Julia -> IDL
+	[x] Create temporary variables
+[] Arrays
+	[x] IDL -> Julia (No copy data)
+	[x] IDL -> Julia (Copy data)
+	[] Julia -> IDL (No copy data)
+	[] Julia -> IDL (Copy data)
+	[] Initialize IDL arrays from Julia
+[] Structures (depends on the completion of the array interface)
+	[] IDL -> Julia
+	[] Julia -> IDL
+[] Objects
+
+Extras:
+[] REPL Mode (`IDL>` prompt)
+[] `@idl_str` macro
+[] automatic interpolation of variables from julia and idl
+
+Currently the package provides the bare minimum to have some basic interaction between IDL and julia.
+
+For the time being, most shortcomings of the current API can be overcome by using the `execute` functionality, by grafting a valid IDL string to be `eval`'d by the IDL runtime.
+
+# Quickstart
 
 ```julia
 using IDL
 ```
 Once the package is loaded, it will automatically acquire a license. The license is bound to the current julia process. To drop the licence close the julia process.
 
-You can add a Julia variable to the IDL process with
+Create a variable in IDL and get an handle to it from Julia:
 ```julia
-x = 1
-IDL.putvar(x, "x")
+IDL.execute("x = 10LL") # LL creates an Int64
+
+x = IDL.var(:x)
 ```
-and you can retrieve variable into Julia using
+Instead you can initialize a new (or exising) variable with a value directly from Julia
 ```julia
-x2 = IDL.getvar("x")
-@assert x2 == x
+y = IDL.var(:y, 20)
 ```
-You can run an arbitrary chunk of code in IDL using
+Look at the value held by the IDL variable
 ```julia
-IDL.execute("any valid idl code")
+@assert x[] == y[] - 10
+@assert 2 * IDL.scalar(x) == IDL.scalar(y)
 ```
 
+Specify the type of the variable from the julia side:
+```julia
+@assert IDL.scalar(y) isa Int
+@assert IDL.scalar(Float32, y) === Float32(20)
+@assert convert(UInt32, x) === IDL.scalar(UInt32, x)
+
+# Directly extract just the value of the desired type
+xfloat::Float64 = IDL.var(:x)
+yfloat = IDL.scalar(Float32, :y)
+@assert xfloat == 10.0
+@assert yfloat == 20.0f0
+
+# The IDL variable retains its type
+@assert eltype(y) == eltype(x) == Int
+
+```
+
+Change the value of the variables:
+```julia
+x[] = "Hello, "
+y[] = "IDL!"
+
+@assert eltype(x) == eltype(y) == String
+```
+>[!WARN]
+> Currently only Integers, Floats, Complex, Strings and Booleans are supported through this API.
+
+>[!NOTE]
+> If a variable is manipulated both from Julia and IDL, extra care is advised in keeping track of the actual type of the variable.
+
+<!--
 IDL has three main types of datatypes:
 ### Scalars
 These include mostly primitive types such as `Int`s/`UInt`s, `Double`s, etc..
-Notably, IDL's `String`s are considered scalars even though they aren't really. (they are `isbits` though)
-Scalar values involving strings, will be copied through `unsafe_string`.
+Notably, IDL's `String`s are considered scalars even though they aren't really.
 
 ### Arrays
  - Arrays in IDL are akin to a mutable `NTuple` or `SizedArray` from `StaticArrays.jl`.
  - IDL supports multiarrays, but there is a hardcoded maximum of 8 dimensions.
- - IDL Arrays are column major, but the first two dimensions are swapped: `A[column, row]` instead of `A[row, column]` as in julia. This package automatically takes care of representing the array correctly so that changes in julia correspond to the expected change in idl.
+ - IDL Arrays are column major
+
  - It is possible to have arrays of structures even though structures are not scalars, but it is peculiar in the sense that Array of Structures in IDL behave very much like Structures of Arrays, and all structures must have the same signature (both tag structure and type).
 
  - Arrays of scalars are not copied from idl to julia.
@@ -61,9 +121,9 @@ Scalar values involving strings, will be copied through `unsafe_string`.
  >[!WARN]
  > You must take care to keep assigned the variable that holds the data you're referencing from julia assigned, so that IDL does not reuse the memory.
 
- - Arrays of up to 8 dimensions in julia memory can be passed to IDL and will automatically be kept safe from the GC. The data can be manipulated from either side.
+ - Arrays of up to 8 dimensions in julia memory can be passed to IDL and will automatically be kept safe from the GC. The data can be manipulated from either side. -->
 
-### Structures:
+<!-- ### Structures:
 Structures in IDL are not like structures in Julia, instead they are more akin to
 "optionally named" named tuples. An example of structure in idl is of the form:
 `idl_struct = {NAME, TAG1:1, TAG2:2, TAG3:3}` or anonymous structures as
@@ -74,11 +134,11 @@ with all its tags, that wraps IDL memory. The IDL structures in julia behaves as
 
 >[!WARN]
 > Currently it is not (yet) possible to pass structured data from julia to IDL directly.
-> If absolutely needed one can construct a string that defines the structure in IDL syntax and generate it directly in idl via a `IDL.execute` call.
+> If absolutely needed one can construct a string that defines the structure in IDL syntax and generate it directly in idl via a `IDL.execute` call. -->
 
 ### `IDL.execute`
 This package provides the `execute` function that sends to idl a string to be evaluated, as if
-you're typing it in the console.
+you're typing it in the console. Accepts multiline strings, with comments and linebreaks.
 
 Some convenient wrappers of `IDL.execute` are provided:
 ```
@@ -88,18 +148,3 @@ IDL.reset
 IDL.full_reset
 IDL.dotrun
 ```
-textual output generated in idl is automatically piped to julia.
-
-## TODO
-Currently the package provides the bare minimum to have some basic interaction between IDL and julia. The `execute` functionality provided by the IDL runtime is flexible enough it can circumvent the current limitations, at the expense of performance and ergonomicity.
-
-These are some of the planned feature for this package (in no particular order):
-
-- create a `@idl_str` macro to allow for easier use of the `execute` function
-- send structured data from julia to idl
-- add an option to copy data to and from idl, instead of wrapping it.
-- notify when idl memory referenced from julia is freed.
-- add an idl REPL prompt mode
-- helper `@get/@put` macros
-
-Another addition is giving and `@idl_str` macro so that one can also just call with `idl"v = !NULL"`.
