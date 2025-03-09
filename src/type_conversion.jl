@@ -80,5 +80,5 @@ Base.convert(::Type{ComplexF32}, idlc::IDL_COMPLEX) = ComplexF32(idlc.r, idlc.i)
 Base.convert(::Type{ComplexF64}, idlc::IDL_DCOMPLEX) = ComplexF64(idlc.r, idlc.i)
 
 
-idlconvert(t::T) where T <: JL_SCALAR = t
-idlconvert(t::IDL_STRING) = convert(String, t)
+idl2jl(t::T) where T <: JL_SCALAR = t
+idl2jl(t::IDL_STRING) = convert(String, t)
