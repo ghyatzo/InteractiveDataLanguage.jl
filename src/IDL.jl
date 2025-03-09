@@ -87,8 +87,17 @@ include("arrays.jl")
 
 # include("structs.jl")
 # include("common.jl")
+execute(string::AbstractString) = begin
+    # remove comments and coalesce line breaks
+    string = replace(replace(string, r";.*" => ""), r"\$\s*\n" => "")
+    iostring = IOBuffer(string)
+    for line in eachline(iostring)
+        IDL_ExecuteStr(line)
+    end
+end
 
 # include("IDLREPL.jl")
+
 
 const ERROR_MSG = Ref{String}("")
 
@@ -113,7 +122,7 @@ end
 const OUTPUT_CB = Ref{Ptr{Cvoid}}()
 
 function __init__()
-    @info "Initializing IDL..."
+    @info "Acquiring License..."
     init_options = IDL_INIT_BACKGROUND # | IDL_INIT_QUIET
 
     init_data = Ref(IDL_INIT_DATA(init_options))
