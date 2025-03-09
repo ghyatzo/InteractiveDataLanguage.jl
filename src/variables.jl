@@ -67,10 +67,7 @@ issimplearray(v::Variable) = isarray(v) && !isstruct(v)
 Base.isnothing(v::Variable) = (flags(v) & IDL_V_NULL) != 0
 
 _type(v::Variable) = unsafe_load(v._v.type)
-IDL.eltype(v::Variable) = begin
-	# todo: Add logic for structures
-	jltype(_type(v))
-end
+Base.eltype(v::Variable) = jltype(_type(v))
 
 ## TODO: maybe use the internal "ENSURE etc etc" functions from idl.
 isvalid(v::Variable) = _type(v) != IDL_TYP_UNDEF
@@ -158,14 +155,13 @@ Base.convert(::Type{Float64}, v::Variable) =  begin
 end
 
 
-## Get And Create Scalars
 var(name::Symbol) = begin
 	_var = IDL_GetVarAddr(String(name))
 	if _var == C_NULL
-		throw(UndefVarError("No variable named '$name' in the current IDL scope."))
+		throw(UndefVarError(name, "IDL main scope"))
 	end
 
-	Variable(_var)
+	return Variable(_var)
 end
 
 _store_scalar!(_var::Ptr{IDL_VARIABLE}, x::T) where {T<:JL_SCALAR} = begin
@@ -177,6 +173,7 @@ end
 
 var(name::Symbol, x::T) where {T <: JL_SCALAR} = begin
 	_var = IDL_GetVarAddr(String(name))
+
 	if _var == C_NULL
 		_var = IDL_GetVarAddr1(String(name), IDL_TRUE)
 		tmp = maketemp(x)
@@ -197,17 +194,29 @@ var(name::Symbol, x::String) = begin
 	Variable(_var)
 end
 
-var(v::Variable, x::T) where {T <: JL_SCALAR} = _store_scalar!(v._v, x)
+set!(v::Variable, x::T) where {T <: JL_SCALAR} = (@inline _store_scalar!(v._v, x); return v)
 
-var(v::Variable, x::String) = begin
+set!(v::Variable, x::AbstractString) = begin
+	@inline
 	_tmpvar = IDL_StrToSTRING(x)
-	# This is efficient, the string data is moved to the dest variable
+	# This is efficient, the string data is moved
 	IDL_VarCopy(_tmpvar, v._v)
 	IDL_Deltmp(_tmpvar)
 	v
 end
 
 
+scalar(v::Variable) = convert(eltype(v), v)
+scalar(::Type{T}, v::Variable) where {T<:JL_SCALAR} = convert(T, v)
+# scalar(T, var, value) ?? does it make sense?
+
+scalar(name::Symbol) = scalar(var(name))
+scalar(::Type{T}, name::Symbol) where {T<:JL_SCALAR} = scalar(T, var(name))
+
+
+Base.getindex(v::Variable) = scalar(v)
+Base.setindex!(v::Variable, x::T) where {T<:JL_SCALAR} = set!(v, x)
+Base.setindex!(v::Variable, x::AbstractString) = set!(v, x)
 
 
 function Base.show(io::IO, s::Variable)
