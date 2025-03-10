@@ -1,5 +1,5 @@
 _ndims(_a::Ptr{IDL_ARRAY}) = unsafe_load(_a.n_dim) % Int
-_size(_a::Ptr{IDL_ARRAY}) = unsafe_load(_a.dim)[1:_ndims(_a)]
+_size(_a::Ptr{IDL_ARRAY}) = unsafe_load(_a.dim)
 # we should return 1 for the dimensions without values, but IDL
 # already enforces this.
 _size(_a::Ptr{IDL_ARRAY}, d::Integer) = d <= 8 ? unsafe_load(Ptr{Int}(_a.dim), d) : 0
@@ -20,13 +20,16 @@ end
 _array(x::ArrayView) = _array(x.v)
 isvalid(x::ArrayView) = isvalid(x.v) && isarray(x.v)
 
-Base.IndexStyle(::ArrayView) = IndexCartesian()
-Base.eltype(x::ArrayView) = eltype(x.v)
-Base.size(x::ArrayView) = _size(_array(x))
-Base.size(x::ArrayView, d) = _size(_array(x), d)
-Base.length(x::ArrayView) = _length(_array(x))
+Base.IndexStyle(::ArrayView) = IndexLinear()
 Base.ndims(x::ArrayView) = _ndims(_array(x))
-Base.keys(x::ArrayView) = ndims(x) > 1 ? CartesianIndices(axes(x)) : LinearIndices(Base.axes1(x))
+Base.size(x::ArrayView) = _size(_array(x))[1:ndims(x)]
+Base.size(x::ArrayView, d) = _size(_array(x), d)
+# Base.axes(x::ArrayView) = map(Base.OneTo, _size(_array(x)))
+Base.eltype(x::ArrayView) = eltype(x.v)
+Base.length(x::ArrayView) = _length(_array(x))
+# Base.keys(x::ArrayView) = ndims(x) > 1 ? CartesianIndices(axes(x)) : LinearIndices(Base.axes1(x))
+# Base.keys(::IndexLinear, x::ArrayView) = LinearIndices(axes(x))
+# Base.keys(::IndexCartesian, x::ArrayView) = CartesianIndices(axes(x))
 Base.firstindex(x::ArrayView) = 1
 Base.lastindex(x::ArrayView) = length(x)
 
@@ -112,6 +115,49 @@ copyarray(x::ArrayView) = begin
 end
 copyarray(v::Variable) = copyarray(array(v))
 copyarray(name::Symbol) = copyarray(var(name))
+
+
+
+struct JLArrayRoot
+	name::String
+	ndims::Int
+	dims::NTuple{8, Int}
+	dataref::Ref
+end
+_mkarray(name::String, arr::Array{T, N}) where {T<:JL_SCALAR, N} = begin
+	N > 8 && throw(ArgumentError("IDL Arrays can have at most 8 dimensions."))
+
+	root = Ref{JLArrayRoot}(JLArrayRoot(
+		name, N, (size(arr)..., zeros(8-N)...), arr.ref
+	))
+
+	_root = pointer_from_objref(root)
+
+	_root_data = preserve_ref(pointer(arr), root)
+	_root_dims = _root + fieldoffset(typeof(root), 1) + fieldoffset(JLArrayRoot, 3)
+
+	_var = IDL_ImportNamedArray(
+		root[].name,
+		root[].ndims,
+		_root_dims,
+		idltype(T),
+		_root_data,
+		FREE_JLARR[],
+		C_NULL
+	)
+
+	_var
+end
+array(v::Variable, arr::Array{T, N}) where {T<:JL_SCALAR, N} = begin
+	_v = _mkarray(name(v), arr)
+	@assert v._v == _v
+	array(v)
+end
+
+array(name::Symbol, arr::Array{T, N}) where {T<:JL_SCALAR, N} = begin
+	array(Variable(_mkarray(String(name), arr)))
+end
+
 
 
 

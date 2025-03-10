@@ -59,13 +59,13 @@ Base.getproperty(x::Ptr{IDL_ARRAY}, f::Symbol) = begin
 end
 
 const JL_REF_HOLDING = Dict{Ptr, Ref}()
+const FREE_JLARR = Ref{Ptr{Cvoid}}()
 
 free_jl_array_ref(_p::Ptr{Cuchar}) = begin
     @debug "Dropping pointer: $_p"
     delete!(JL_REF_HOLDING, _p)
     nothing
 end
-const FREE_JLARR = Ref{Ptr{Cvoid}}()
 
 preserve_ref(_x::Ptr, x::Ref) = begin
     JL_REF_HOLDING[_x] = x
