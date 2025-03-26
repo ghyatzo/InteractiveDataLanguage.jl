@@ -59,7 +59,6 @@ Base.getproperty(x::Ptr{IDL_ARRAY}, f::Symbol) = begin
 end
 
 const JL_REF_HOLDING = Dict{Ptr, Ref}()
-const FREE_JLARR = Ref{Ptr{Cvoid}}()
 
 free_jl_array_ref(_p::Ptr{Cuchar}) = begin
     @debug "Dropping pointer: $_p"
@@ -77,27 +76,6 @@ preserve_ref(x::Ref) = begin
     JL_REF_HOLDING[_x] = x
     _x
 end
-
-
-include("type_conversion.jl")
-
-include("variables.jl")
-
-include("arrays.jl")
-
-# include("structs.jl")
-# include("common.jl")
-execute(string::AbstractString) = begin
-    # remove comments and coalesce line breaks
-    string = replace(replace(string, r";.*" => ""), r"\$\s*\n" => "")
-    iostring = IOBuffer(string)
-    for line in eachline(iostring)
-        IDL_ExecuteStr(line)
-    end
-end
-
-# include("IDLREPL.jl")
-
 
 const ERROR_MSG = Ref{String}("")
 
@@ -120,6 +98,28 @@ function output_callback(flags, buf::Ptr{UInt8}, n)::Cvoid
 end
 
 const OUTPUT_CB = Ref{Ptr{Cvoid}}()
+const FREE_JLARR = Ref{Ptr{Cvoid}}()
+
+
+include("type_conversion.jl")
+
+include("variables.jl")
+
+include("arrays.jl")
+
+# include("structs.jl")
+# include("common.jl")
+execute(string::AbstractString) = begin
+    # remove comments and coalesce line breaks
+    string = replace(replace(string, r";.*" => ""), r"\$\s*\n" => "")
+    iostring = IOBuffer(string)
+    for line in eachline(iostring)
+        IDL_ExecuteStr(line)
+    end
+end
+
+# include("IDLREPL.jl")
+
 
 function __init__()
     @info "Acquiring License..."
@@ -141,6 +141,8 @@ function __init__()
 
     OUTPUT_CB[] = @cfunction(output_callback, Cvoid, (Cint, Ptr{UInt8}, Cint))
     FREE_JLARR[] = @cfunction(free_jl_array_ref, Nothing, (Ptr{Cuchar},))
+
+    
 
     IDL_ToutPush(OUTPUT_CB[])
 

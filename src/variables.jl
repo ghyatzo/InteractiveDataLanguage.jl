@@ -22,14 +22,18 @@
 # julia> _var = IDL.IDL_GetVarAddr("s")
 # Ptr{IDL.IDL_VARIABLE} @0x00000238ce6b7c40
 
+# julia> IDL.IDL_Delvar(_var)
+
+# julia> _var = IDL.IDL_GetVarAddr("s")
+# Ptr{IDL.IDL_VARIABLE} @0x00000238ce6b7c40
 
 
 ## Even deleting a variable simply makes it an undef!
 ## IDL Variables are always valid basically...
 
-varflags(_var::Ptr{IDL_VARIABLE}) = unsafe_load(_var.flags)
-vartype(_var::Ptr{IDL_VARIABLE}) = unsafe_load(_var.type)
-varinfo(_var::Ptr{IDL_VARIABLE}) = (varflags(_var), vartype(_var))
+_varflags(_var::Ptr{IDL_VARIABLE}) = unsafe_load(_var.flags)
+_vartype(_var::Ptr{IDL_VARIABLE}) = unsafe_load(_var.type)
+_varinfo(_var::Ptr{IDL_VARIABLE}) = (_varflags(_var), _vartype(_var))
 
 const ALL_T = Ref{IDL_ALLTYPES}()
 
@@ -37,7 +41,7 @@ mutable struct Variable
 	_v::Ptr{IDL_VARIABLE}
 
 	function Variable(_v::Ptr{IDL_VARIABLE})
-		var_f, var_t = varinfo(_v)
+		var_f, var_t = _varinfo(_v)
 
 		if (var_f & IDL_V_FILE) != 0
 			error("File Variables not yet implemented")
@@ -50,40 +54,39 @@ mutable struct Variable
 	end
 end
 
-flags(v::Variable) = unsafe_load(v._v.flags)
+varflags(v::Variable) = _varflags(v._v)
+vartype(v::Variable) = IDL_TYP(_vartype(v._v))
+Base.eltype(v::Variable) = jltype(vartype(v))
 name(v::Variable) = unsafe_string(IDL_VarName(v._v))
 
-# const variables should not be changed. not enforced by IDL.
-isconst(v::Variable) = (flags(v) & IDL_V_CONST) != 0
-istemp(v::Variable) = (flags(v) & IDL_V_TEMP) != 0
-isfile(v::Variable) = (flags(v) & IDL_V_FILE) != 0
+isconst(v::Variable) = (varflags(v) & IDL_V_CONST) != 0
+istemp(v::Variable) = (varflags(v) & IDL_V_TEMP) != 0
+isfile(v::Variable) = (varflags(v) & IDL_V_FILE) != 0
 # dynamic variables are arrays, structures or strings, because the data is behind a pointer.
-isdynamic(v::Variable) = (flags(v) & IDL_V_DYNAMIC) != 0
-isarray(v::Variable) = (flags(v) & IDL_V_ARR) != 0
-isstruct(v::Variable) = (flags(v) & IDL_V_STRUCT) != 0
+isdynamic(v::Variable) = (varflags(v) & IDL_V_DYNAMIC) != 0
+isarray(v::Variable) = (varflags(v) & IDL_V_ARR) != 0
+isstruct(v::Variable) = (varflags(v) & IDL_V_STRUCT) != 0
 isscalar(v::Variable) = !isarray(v) && !IDL.isfile(v)
-isboolean(v::Variable) = ((flags(v) & IDL_V_BOOLEAN) != 0) && (_type(v) == IDL_TYP_BYTE)
+isboolean(v::Variable) = ((varflags(v) & IDL_V_BOOLEAN) != 0) && (vartype(v) == T_BYTE)
 issimplearray(v::Variable) = isarray(v) && !isstruct(v)
-Base.isnothing(v::Variable) = (flags(v) & IDL_V_NULL) != 0
+Base.isnothing(v::Variable) = (varflags(v) & IDL_V_NULL) != 0
 
-_type(v::Variable) = unsafe_load(v._v.type)
-Base.eltype(v::Variable) = jltype(_type(v))
 
 ## TODO: maybe use the internal "ENSURE etc etc" functions from idl.
-isvalid(v::Variable) = _type(v) != IDL_TYP_UNDEF
+isvalid(v::Variable) = vartype(v) != T_UNDEF
 checkvalid(v::Variable) = isvalid(v) || throw(UndefVarError(:v, "IDL"))
-checkarray(v::Variable) = isarray(v) || throw(ErrorException("The variable is not a array."))
+checkarray(v::Variable) = isarray(v) || throw(ErrorException("The variable is not an array."))
 checkstruct(v::Variable) = isstruct(v) || throw(ErrorException("The variable is not a structure."))
 checkscalar(v::Variable) = isscalar(v) || throw(ErrorException("The variable is not a scalar."))
 
 _array(v::Variable) = checkvalid(v) && checkarray(v) && unsafe_load(v._v.value.arr)
-_structdef(v::Variable) = checkvalid(v) && checkstruct(v) && v._v.value.s
+_sdef(v::Variable) = checkvalid(v) && checkstruct(v) && v._v.value.s
 _scalar(v::Variable) = begin
 	checkvalid(v) && checkscalar(v)
-	Base.getproperty(v._v.value, _alltypes_sym(_type(v)))
+	Base.getproperty(v._v.value, _alltypes_sym(vartype(v)))
 end
 
-
+# idl doesn't like '#'
 idlgensym(tag="jl") = replace(String(gensym(tag)), "#" => "_")
 
 # make temporary variables
@@ -149,7 +152,7 @@ Base.convert(::Type{UInt64}, v::Variable) = begin
 	isscalar(v) || throw(ArgumentError("Can't convert a non scalar variable into a scalar value."))
 	IDL_ULong64Scalar(v._v)
 end
-Base.convert(::Type{Float64}, v::Variable) =  begin
+Base.convert(::Type{Float64}, v::Variable) = begin
 	isscalar(v) || throw(ArgumentError("Can't convert a non scalar variable into a scalar value."))
 	IDL_DoubleScalar(v._v)
 end
@@ -158,7 +161,7 @@ end
 var(name::Symbol) = begin
 	_var = IDL_GetVarAddr(String(name))
 	if _var == C_NULL
-		throw(UndefVarError(name, "IDL main scope"))
+		throw(UndefVarError(name, "IDL"))
 	end
 
 	return Variable(_var)
@@ -206,15 +209,14 @@ set!(v::Variable, x::AbstractString) = begin
 end
 
 
-scalar(v::Variable) = convert(eltype(v), v)
-scalar(::Type{T}, v::Variable) where {T<:JL_SCALAR} = convert(T, v)
-# scalar(T, var, value) ?? does it make sense?
+jlscalar(v::Variable) = convert(eltype(v), v)
+jlscalar(::Type{T}, v::Variable) where {T<:JL_SCALAR} = convert(T, v)
 
-scalar(name::Symbol) = scalar(var(name))
-scalar(::Type{T}, name::Symbol) where {T<:JL_SCALAR} = scalar(T, var(name))
+jlscalar(name::Symbol) = jlscalar(var(name))
+jlscalar(::Type{T}, name::Symbol) where {T<:JL_SCALAR} = jlscalar(T, var(name))
 
 
-Base.getindex(v::Variable) = scalar(v)
+Base.getindex(v::Variable) = jlscalar(v)
 Base.setindex!(v::Variable, x::T) where {T<:JL_SCALAR} = set!(v, x)
 Base.setindex!(v::Variable, x::AbstractString) = set!(v, x)
 
@@ -226,17 +228,17 @@ function Base.show(io::IO, s::Variable)
 
 	variablename = unsafe_string(IDL.IDL_VarName(s._v))
 
-	print("IDL.Variable: $conststr$tempstr'$variablename' - $validstr")
+	print(io, "IDL.Variable: $conststr$tempstr'$variablename' - $validstr")
 	isvalid(s) || return
 
 	typestr = isstruct(s) ? "STRUCT" :
 		isfile(s) ? "FILE" :
 		isboolean(s) ? "BOOL" :
-		jltype(_type(s))
+		eltype(s)
 
-	print(typestr)
+	print(io, typestr)
 	if issimplearray(s)
-		print(" (ARRAY)")
+		print(io, " (ARRAY)")
 	end
 
 end

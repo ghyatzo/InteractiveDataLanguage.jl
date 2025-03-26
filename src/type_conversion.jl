@@ -2,67 +2,96 @@ const JL_SCALAR = Union{
 	# Nothing,
 	UInt8,
 	Int16,
-	UInt16,
 	Int32,
-	UInt32,
-	Int64,
-	UInt64,
 	Float32,
 	Float64,
 	ComplexF32,
-	ComplexF64,
 	# String
+	# struct
+	ComplexF64,
+	# Ptr
+	# Objref
+	UInt16,
+	UInt32,
+	Int64,
+	UInt64,
 }
 
-jltype(t::UInt8) = jltype(Val(Int(t)))
-jltype(::Val{IDL_TYP_UNDEF}) = undef
-jltype(::Val{IDL_TYP_BYTE}) = Cuchar
-jltype(::Val{IDL_TYP_INT}) = Cshort
-jltype(::Val{IDL_TYP_UINT}) = Cushort
-jltype(::Val{IDL_TYP_LONG}) = Cint
-jltype(::Val{IDL_TYP_ULONG}) = Cuint
-jltype(::Val{IDL_TYP_LONG64}) = Clonglong
-jltype(::Val{IDL_TYP_ULONG64}) = Culonglong
-jltype(::Val{IDL_TYP_FLOAT}) = Cfloat
-jltype(::Val{IDL_TYP_DOUBLE}) = Cdouble
-jltype(::Val{IDL_TYP_COMPLEX}) = ComplexF32
-jltype(::Val{IDL_TYP_DCOMPLEX}) = ComplexF64
-jltype(::Val{IDL_TYP_STRING}) = String
-jltype(::Val{IDL_TYP_STRUCT}) = DataType # TODO...
-jltype(::Val{IDL_TYP_PTR}) = error("IDL pointers are not yet supported")
-jltype(::Val{IDL_TYP_OBJREF}) = error("IDL Objects are not yet supported")
+@enum IDL_TYP begin
+	T_UNDEF
+	T_BYTE
+	T_INT
+	T_LONG
+	T_FLOAT
+	T_DOUBLE
+	T_COMPLEX
+	T_STRING
+	T_STRUCT
+	T_DCOMPLEX
+	T_PTR
+	T_OBJREF
+	T_UINT
+	T_ULONG
+	T_LONG64
+	T_ULONG64
+end
 
+jltype(t::IDL_TYP) = begin
+	t == T_UNDEF ? Nothing :
+	t == T_BYTE ? UInt8 :
+	t == T_INT ? Int16 :
+	t == T_LONG ? Int32 :
+	t == T_FLOAT ? Float32 :
+	t == T_DOUBLE ? Float64 :
+	t == T_COMPLEX ? ComplexF32 :
+	t == T_STRING ? String :
+	t == T_STRUCT ? DataType :
+	t == T_DCOMPLEX ? ComplexF64 :
+	t == T_PTR ? Ptr :
+	t == T_OBJREF ? Ptr :
+	t == T_UINT ? UInt16 :
+	t == T_ULONG ? UInt32 :
+	t == T_LONG64 ? Int64 :
+	t == T_ULONG64 ? UInt64 :
+	Nothing
+end
 
-idltype(::Type{Nothing}) = IDL_TYP_UNDEF
-idltype(::Type{UInt8}) = IDL_TYP_BYTE
-idltype(::Type{Int16}) = IDL_TYP_INT
-idltype(::Type{UInt16}) = IDL_TYP_UINT
-idltype(::Type{Int32}) = IDL_TYP_LONG
-idltype(::Type{UInt32}) = IDL_TYP_ULONG
-idltype(::Type{Int64}) = IDL_TYP_LONG64
-idltype(::Type{UInt64}) = IDL_TYP_ULONG64
-idltype(::Type{Float32}) = IDL_TYP_FLOAT
-idltype(::Type{Float64}) = IDL_TYP_DOUBLE
-idltype(::Type{ComplexF32}) = IDL_TYP_COMPLEX
-idltype(::Type{ComplexF64}) = IDL_TYP_DCOMPLEX
-idltype(::Type{String}) = IDL_TYP_STRING
+idltype(::Type{Nothing}) = T_UNDEF
+idltype(::Type{UInt8}) = T_BYTE
+idltype(::Type{Int16}) = T_INT
+idltype(::Type{Int32}) = T_LONG
+idltype(::Type{Float32}) = T_FLOAT
+idltype(::Type{Float64}) = T_DOUBLE
+idltype(::Type{ComplexF32}) = T_COMPLEX
+idltype(::Type{String}) = T_STRING
+# TODO: STRUCT
+idltype(::Type{ComplexF64}) = T_DCOMPLEX
+# TODO: PTR
+# TODO: OBJREF
+idltype(::Type{UInt16}) = T_UINT
+idltype(::Type{UInt32}) = T_ULONG
+idltype(::Type{Int64}) = T_LONG64
+idltype(::Type{UInt64}) = T_ULONG64
 
-_alltypes_sym(t) = _alltypes_sym(Val(Int(t)))
-_alltypes_sym(::Val{IDL_TYP_BYTE}) = :c
-_alltypes_sym(::Val{IDL_TYP_INT}) = :i
-_alltypes_sym(::Val{IDL_TYP_UINT}) = :ui
-_alltypes_sym(::Val{IDL_TYP_LONG}) = :l
-_alltypes_sym(::Val{IDL_TYP_ULONG}) = :ul
-_alltypes_sym(::Val{IDL_TYP_LONG64}) = :l64
-_alltypes_sym(::Val{IDL_TYP_ULONG64}) = :ul64
-_alltypes_sym(::Val{IDL_TYP_FLOAT}) = :f
-_alltypes_sym(::Val{IDL_TYP_DOUBLE}) = :d
-_alltypes_sym(::Val{IDL_TYP_COMPLEX}) = :cmp
-_alltypes_sym(::Val{IDL_TYP_DCOMPLEX}) = :dcmp
-_alltypes_sym(::Val{IDL_TYP_STRING}) = :str
-_alltypes_sym(::Val{IDL_TYP_STRUCT}) = :s
-_alltypes_sym(::Val{IDL_TYP_PTR}) = :hvid
-_alltypes_sym(::Val{IDL_TYP_OBJREF}) = :hvid
+_alltypes_sym(t::IDL_TYP) = begin
+	t == T_UNDEF ? :NULL :
+	t == T_BYTE ? :c :
+	t == T_INT ? :i :
+	t == T_LONG ? :l :
+	t == T_FLOAT ? :f :
+	t == T_DOUBLE ? :d :
+	t == T_COMPLEX ? :cmp :
+	t == T_STRING ? :str :
+	t == T_STRUCT ? :s :
+	t == T_DCOMPLEX ? :dcmp :
+	t == T_PTR ? :hvid :
+	t == T_OBJREF ? :hvid :
+	t == T_UINT ? :ui :
+	t == T_ULONG ? :ul :
+	t == T_LONG64 ? :l64 :
+	t == T_ULONG64 ? :ul64 :
+	:NULL
+end
 
 
 Base.convert(::Type{String}, x::IDL_STRING) = IDL_STRING_STR(x)
@@ -71,7 +100,6 @@ Base.convert(::Type{IDL_STRING}, s::String) = begin
 	IDL_StrStore(strref, s)
 	strref[]
 end
-
 
 
 Base.convert(::Type{IDL_COMPLEX}, c::ComplexF32) = IDL_COMPLEX(c.re, c.im)
