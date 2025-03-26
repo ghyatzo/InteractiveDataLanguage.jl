@@ -20,9 +20,9 @@ const IDL_SCALAR_TYPES = [
 	include("scalar_values.jl")
 end
 
-# @testset "Arrays" begin
-# 	include("arrays.jl")
-# end
+@testset "Arrays" begin
+	include("arrays.jl")
+end
 
 # @testset "GET: Structs" begin
 # 	@testset "Simple Struct" begin

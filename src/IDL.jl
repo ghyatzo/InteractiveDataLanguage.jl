@@ -19,6 +19,11 @@ module IDL
 
 using StaticArrays
 
+export idlvar, jlscalar, idlview, unsafe_idlview, jlarray
+
+
+
+
 if Sys.isunix()
     idl_exec = chomp(read(`which idl`,String))
     if islink(idl_exec)
@@ -107,6 +112,13 @@ include("variables.jl")
 
 include("arrays.jl")
 
+function Base.getindex(v::Variable)
+    isarray(v) && return (@inbounds idlview(v))
+    return jlscalar(v)
+end
+Base.setindex!(v::Variable, x::T) where {T<:JL_SCALAR} = set!(v, x)
+Base.setindex!(v::Variable, x::AbstractString) = set!(v, x)
+
 # include("structs.jl")
 # include("common.jl")
 execute(string::AbstractString) = begin
@@ -142,7 +154,7 @@ function __init__()
     OUTPUT_CB[] = @cfunction(output_callback, Cvoid, (Cint, Ptr{UInt8}, Cint))
     FREE_JLARR[] = @cfunction(free_jl_array_ref, Nothing, (Ptr{Cuchar},))
 
-    
+
 
     IDL_ToutPush(OUTPUT_CB[])
 

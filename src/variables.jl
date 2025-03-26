@@ -158,7 +158,7 @@ Base.convert(::Type{Float64}, v::Variable) = begin
 end
 
 
-var(name::Symbol) = begin
+idlvar(name::Symbol) = begin
 	_var = IDL_GetVarAddr(String(name))
 	if _var == C_NULL
 		throw(UndefVarError(name, "IDL"))
@@ -174,7 +174,7 @@ _store_scalar!(_var::Ptr{IDL_VARIABLE}, x::T) where {T<:JL_SCALAR} = begin
 	IDL_StoreScalar(_var, idltype(T), _all_t)
 end
 
-var(name::Symbol, x::T) where {T <: JL_SCALAR} = begin
+idlvar(name::Symbol, x::T) where {T <: JL_SCALAR} = begin
 	_var = IDL_GetVarAddr(String(name))
 
 	if _var == C_NULL
@@ -188,7 +188,7 @@ var(name::Symbol, x::T) where {T <: JL_SCALAR} = begin
 	return Variable(_var)
 end
 
-var(name::Symbol, x::String) = begin
+idlvar(name::Symbol, x::String) = begin
 	_var = IDL_GetVarAddr1(String(name), IDL_TRUE)
 	_tmpvar = IDL_StrToSTRING(x)
 	IDL_VarCopy(_tmpvar, _var)
@@ -212,13 +212,8 @@ end
 jlscalar(v::Variable) = convert(eltype(v), v)
 jlscalar(::Type{T}, v::Variable) where {T<:JL_SCALAR} = convert(T, v)
 
-jlscalar(name::Symbol) = jlscalar(var(name))
-jlscalar(::Type{T}, name::Symbol) where {T<:JL_SCALAR} = jlscalar(T, var(name))
-
-
-Base.getindex(v::Variable) = jlscalar(v)
-Base.setindex!(v::Variable, x::T) where {T<:JL_SCALAR} = set!(v, x)
-Base.setindex!(v::Variable, x::AbstractString) = set!(v, x)
+jlscalar(name::Symbol) = jlscalar(idlvar(name))
+jlscalar(::Type{T}, name::Symbol) where {T<:JL_SCALAR} = jlscalar(T, idlvar(name))
 
 
 function Base.show(io::IO, s::Variable)

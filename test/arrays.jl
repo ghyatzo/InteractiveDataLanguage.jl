@@ -1,49 +1,37 @@
 @testset "GET: Arrays of scalars" begin
 
-	@testset for (jltype, idlsuffix) in IDL_SIMPLE_TYPES
-		array_string = "[" * join(fill("5$idlsuffix", 5), ',') * "]"
+	@testset for (jltype, idlsuffix) in IDL_SCALAR_TYPES
 
-		execute("var = $array_string")
+		if jltype == ComplexF32 || jltype == ComplexF64
+			array_string = "[" * join(fill("$idlsuffix(5, 0)", 5), ',') * "]"
+		else
+			array_string = "[" * join(fill("5$idlsuffix", 5), ',') * "]"
+		end
 
-		var = IDL.var(:var)
-
-		@test var isa AbstractArray{jltype, 1}
-		@test var == jltype[5, 5, 5, 5, 5]
-
-		resetsession()
-	end
-
-	@testset "ComplexF32" begin
-		execute("var = [COMPLEX(69.0, 42.0), COMPLEX(42.0, 69.0)]")
+		IDL.execute("var = $array_string")
 
 		var = IDL.var(:var)
 
-		@test var isa AbstractArray{ComplexF32, 1}
-		@test var == [ComplexF32(69.0, 42.0), ComplexF32(42.0, 69.0)]
+		@test var[] isa AbstractArray{jltype, 1}
+		@test var[] == jltype[5, 5, 5, 5, 5]
 
-		resetsession()
-	end
+		@test var[][1] == jltype(5)
+		var[][2] = jltype(6)
+		@test var[] == jltype[5, 6, 5, 5, 5]
 
-	@testset "ComplexF32" begin
-		execute("var = [DCOMPLEX(69.0, 42.0), DCOMPLEX(42.0, 69.0)]")
-
-		var = IDL.var(:var)
-
-		@test var isa AbstractArray{ComplexF64, 1}
-		@test var == [ComplexF64(69.0, 42.0), ComplexF64(42.0, 69.0)]
-
-		resetsession()
 	end
 
 	@testset "Strings" begin
-		execute("var = ['Hello', 'IDL']")
+		IDL.execute("var = ['Hello', 'IDL']")
 
 		var = IDL.var(:var)
 
-		@test var isa AbstractArray{IDL.IDL_STRING, 1}
-		@test var == ["Hello", "IDL"]
+		@test var[] isa AbstractArray{String, 1}
+		@test var[] == ["Hello", "IDL"]
 
-		resetsession()
+		@test var[][1] == "Hello"
+		var[][2] = "World"
+		@test var[] == ["Hello", "World"]
 	end
 end
 
