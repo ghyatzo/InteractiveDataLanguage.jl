@@ -7,76 +7,161 @@ _elsize(_a::Ptr{IDL_ARRAY}) = unsafe_load(_a.elt_len)
 _length(_a::Ptr{IDL_ARRAY}) = unsafe_load(_a.n_elts)
 _data(_a::Ptr{IDL_ARRAY}) = unsafe_load(_a.data)
 
+# x._customcb = @cfunction($((_p::Ptr{Cuchar}) -> begin
+# 	setfield!(x, :_arr, Ptr{IDL_ARRAY}(C_NULL))
+# 	nothing
+# end), Nothing, (Ptr{Cuchar},))
 
-mutable struct ArrayView
+# unsafe_store!(_arr.free_cb, Base.unsafe_convert(Ptr{Cvoid}, x._customcb))
+
+mutable struct Safety
+	engaged::Bool
+	Safety() = new(true)
+end
+safetycheck(s::Safety) = s.engaged
+@noinline Base.setproperty!(::Safety, ::Symbol, ::Bool) = error("Can't reset the safety.")
+
+mutable struct ArrayView{T, N} <: AbstractArray{T, N}
 	v::Variable
 	offset::UInt
+	safety::Bool
+	_cb::Union{Nothing, Base.CFunction}
+
+	function ArrayView(v::Variable, offset=0; setcb=true)
+		@boundscheck checkarray(v)
+		N = _ndims(_array(v))
+		T = eltype(v)
+
+		arrview = new{T, N}(v, offset, true)
+		if setcb
+			cb = @cfunction($((::Ptr{Cuchar}) -> begin
+				setfield!(arrview, :safety, false)
+				return nothing
+			end), Nothing, (Ptr{Cuchar},))
+
+			unsafe_store!(_array(v).free_cb, Base.unsafe_convert(Ptr{Cvoid}, cb))
+		else
+			cb = nothing
+		end
+		setfield!(arrview, :_cb, cb)
+
+		return arrview
+	end
 end
-function ArrayView(v::Variable)
-	isarray(v) || throw(ArgumentError("The variable be an IDL Array."))
-	return ArrayView(v, 0)
+
+
+# abstract type AbstractArrayView{T, N} <: AbstractArray{T, N} end
+
+# Base.IndexStyle(::AbstractArrayView) = IndexLinear()
+# Base.size(x::AbstractArrayView) = safetycheck(x) && _size(_array(x))[1:ndims(x)]
+# Base.size(x::AbstractArrayView, d) = _size(_array(x), d)
+
+# Base.eltype(::Type{AbstractArrayView{T, N}}) where {T, N} = T
+# Base.length(x::AbstractArrayView) = _length(_array(x))
+
+# Base.firstindex(x::AbstractArrayView) = 1
+# Base.lastindex(x::AbstractArrayView) = length(x)
+
+# function Base.iterate(x::AbstractArrayView, state=(eachindex(x),))
+#     y = Base.iterate(state...)
+#     y === nothing && return nothing
+#     x[y[1]], (state[1], Base.tail(y)...)
+# end
+# Base.IteratorSize(::AbstractArrayView) = Base.HasLength()
+# Base.IteratorEltype(::AbstractArrayView) = Base.HasEltype()
+
+# struct UnsafeView{T, N} <: AbstractArrayView{T, N}
+# 	v::Variable
+# 	offset::UInt
+
+# 	function UnsafeView(v::Variable, offset=0)
+# 		@boundscheck checkarray(v)
+# 		N = _ndims(_array(v))
+# 		T = eltype(v)
+# 		return new{T, N}(v, offset)
+# 	end
+# end
+
+# _array(x::UnsafeView) = _array(x.v)
+# _ptr(x::UnsafeView{T, N}) where {T, N} = Ptr{T}(_data(_array(x)) + x.offset)
+# _ptr(x::UnsafeView{T, N}) where {T <: AbstractString, N} =
+# 	Ptr{IDL_STRING}(_data(_array(x)) + x.offset)
+
+# mutable struct ArrayView2{T, N} <: AbstractArrayView{T, N}
+# 	view::UnsafeView{T, N}
+# 	safety::Bool
+# 	cb::Base.CFunction
+
+# 	function ArrayView2(view::UnsafeView{T, N}) where {T,N}
+# 		arrview = new{T, N}(view, true)
+# 		cb = @cfunction($((::Ptr{Cuchar}) -> begin
+# 			setfield!(arrview, :safety, false)
+# 			return nothing
+# 		end), Nothing, (Ptr{Cuchar},))
+# 		unsafe_store!(_array(view.v).free_cb, Base.unsafe_convert(Ptr{Cvoid}, cb))
+# 		setfield!(arrview, :cb, cb)
+# 		return arrview
+# 	end
+# end
+
+function safetycheck(x::ArrayView)
+	x.safety ||
+	throw(InvalidStateException("""The array the view was pointing to has been freed.
+
+		To keep using this variable extract the variable pointer by calling the `var` method.""", :ArrayView))
 end
 
 _array(x::ArrayView) = _array(x.v)
-isvalid(x::ArrayView) = isvalid(x.v) && isarray(x.v)
+_ptr(x::ArrayView{T, N}) where {T, N} =
+	@boundscheck safetycheck(x) && Ptr{T}(_data(_array(x)) + x.offset)
+_ptr(x::ArrayView{T, N}) where {T <: AbstractString, N} =
+	@boundscheck safetycheck(x) && Ptr{IDL_STRING}(_data(_array(x)) + x.offset)
 
 Base.IndexStyle(::ArrayView) = IndexLinear()
-Base.ndims(x::ArrayView) = _ndims(_array(x))
-Base.size(x::ArrayView) = _size(_array(x))[1:ndims(x)]
+Base.size(x::ArrayView) = safetycheck(x) && _size(_array(x))[1:ndims(x)]
 Base.size(x::ArrayView, d) = _size(_array(x), d)
-# Base.axes(x::ArrayView) = map(Base.OneTo, _size(_array(x)))
-Base.eltype(x::ArrayView) = eltype(x.v)
+
+Base.eltype(::Type{ArrayView{T, N}}) where {T, N} = T
 Base.length(x::ArrayView) = _length(_array(x))
-# Base.keys(x::ArrayView) = ndims(x) > 1 ? CartesianIndices(axes(x)) : LinearIndices(Base.axes1(x))
-# Base.keys(::IndexLinear, x::ArrayView) = LinearIndices(axes(x))
-# Base.keys(::IndexCartesian, x::ArrayView) = CartesianIndices(axes(x))
+
 Base.firstindex(x::ArrayView) = 1
 Base.lastindex(x::ArrayView) = length(x)
-
-data(x::ArrayView) = begin
-	isvalid(x) ||
-		throw(InvalidStateException("""The variable no longer points to an array.
-			To keep using this variable extract the underlaying variable by calling
-			the `var` method.""", :ArrayView))
-	Ptr{eltype(x)}(_data(_array(x)) + x.offset)
-end
 
 function Base.iterate(x::ArrayView, state=(eachindex(x),))
     y = Base.iterate(state...)
     y === nothing && return nothing
     x[y[1]], (state[1], Base.tail(y)...)
 end
+Base.IteratorSize(::ArrayView) = Base.HasLength()
+Base.IteratorEltype(::ArrayView) = Base.HasEltype()
 
-Base.isassigned(x::ArrayView, ::Integer) = isvalid(x)
-Base.isassigned(x::ArrayView, ::Vararg{Integer}) = isvalid(x)
+# # FIXME, the passed in tuple must match the number of axes!
+# Base.checkbounds(x::ArrayView, I...) = Base.checkbounds(Bool, x, I...) || throw(BoundsError(x, I))
+# Base.checkbounds(::Type{Bool}, x::ArrayView, I...) = Base.checkbounds_indices(Bool, axes(x), I)
 
-# FIXME, the passed in tuple must match the number of axes!
-Base.checkbounds(x::ArrayView, I...) = Base.checkbounds(Bool, x, I...) || throw(BoundsError(x, I))
-Base.checkbounds(::Type{Bool}, x::ArrayView, I...) = Base.checkbounds_indices(Bool, axes(x), I)
+# Base.checkbounds(x::ArrayView, i::Int) = Base.checkbounds(Bool, x, i) || throw(BoundsError(x, i))
+# Base.checkbounds(::Type{Bool}, x::ArrayView, i) = Base.checkindex(Bool, Base.OneTo(length(x)), i)
 
-Base.checkbounds(x::ArrayView, i::Int) = Base.checkbounds(Bool, x, i) || throw(BoundsError(x, i))
-Base.checkbounds(::Type{Bool}, x::ArrayView, i) = Base.checkindex(Bool, Base.OneTo(length(x)), i)
-
-Base.getindex(x::ArrayView, i::Integer) = begin
+Base.getindex(x::ArrayView{T, N}, i::Integer) where {T, N} = begin
 	@boundscheck checkbounds(x, i)
-	idl2jl(unsafe_load(data(x), i))
+	convert(T, unsafe_load(_ptr(x), i))
 end
 
-Base.getindex(x::ArrayView, I...) = begin
-	_getindex(x, to_indices(x, I)...)
-end
+# Base.getindex(x::ArrayView, I...) = begin
+# 	_getindex(x, to_indices(x, I)...)
+# end
 
-_getindex(x::ArrayView, I...) = begin
-	@boundscheck checkbounds(x, I...)
-	@inbounds getindex(x, Base._sub2ind(axes(x), I...))
-end
+# _getindex(x::ArrayView, I...) = begin
+# 	@boundscheck checkbounds(x, I...)
+# 	@inbounds getindex(x, Base._sub2ind(axes(x), I...))
+# end
 
 Base.setindex!(x::ArrayView, v::T, i) where T <: JL_SCALAR = begin
 	@boundscheck checkbounds(x, i)
 	T == eltype(x) ||
 		throw(ArgumentError("Attempting to set an element of type $T to an array of $(eltype(x))s"))
 
-	unsafe_store!(data(x), v, i)
+	unsafe_store!(_ptr(x), v, i)
 end
 
 Base.setindex!(x::ArrayView, v::AbstractString, i) = begin
@@ -85,37 +170,30 @@ Base.setindex!(x::ArrayView, v::AbstractString, i) = begin
 	eltype(x) == String ||
 		throw(ArgumentError("Attempting to add an element of type String to an array of $(eltype(x))s"))
 
-	IDL_StrStore(data(x) + (sizeof(IDL_STRING) * (Int(i) - 1)), v)
+	IDL_StrStore(_ptr(x) + (sizeof(IDL_STRING) * (Int(i) - 1)), v)
 end
 
-Base.setindex!(x::ArrayView, v, I...) = begin
-	_setindex!(x, v, to_indices(x, I)...)
-end
+# Base.setindex!(x::ArrayView, v, I...) = begin
+# 	_setindex!(x, v, to_indices(x, I)...)
+# end
 
-_setindex!(x::ArrayView, v, I...) = begin
-	@boundscheck checkbounds(x, I...)
-	@inbounds setindex!(x, v, Base._sub2ind(axes(x), I...))
-end
+# _setindex!(x::ArrayView, v, I...) = begin
+# 	@boundscheck checkbounds(x, I...)
+# 	@inbounds setindex!(x, v, Base._sub2ind(axes(x), I...))
+# end
 
 
-var(x::ArrayView) = x.v
+idlvar(x::ArrayView) = x.v
 
-array(v::Variable) = ArrayView(v)
-array(name::Symbol) = array(var(name))
+idlview(v::Variable) = ArrayView(v)
+idlview(name::Symbol) = view(idlvar(name))
 
-copyarray(x::ArrayView) = begin
-	N = ndims(x)
-	T = eltype(x)
+unsafe_idlview(v::Variable) = ArrayView(v; setcb=false)
+unsafe_idlview(name::Symbol) = unsafe_idlview(idlvar(name))
 
-	ret = Array{T, N}(undef, size(x)...)
-	for i in eachindex(ret)
-		ret[i] = x[i]
-	end
-	return ret
-end
-copyarray(v::Variable) = copyarray(array(v))
-copyarray(name::Symbol) = copyarray(var(name))
-
+jlarray(x::ArrayView{T, N}) where {T, N} = copyto!(similar(x), x)
+jlarray(v::Variable) = jlarray(unsafe_idlview(v))
+jlarray(name::Symbol) = jlarray(idlvar(name))
 
 
 struct JLArrayRoot
@@ -132,7 +210,6 @@ _mkarray(name::String, arr::Array{T, N}) where {T<:JL_SCALAR, N} = begin
 	))
 
 	_root = pointer_from_objref(root)
-
 	_root_data = preserve_ref(pointer(arr), root)
 	_root_dims = _root + fieldoffset(typeof(root), 1) + fieldoffset(JLArrayRoot, 3)
 
@@ -148,14 +225,14 @@ _mkarray(name::String, arr::Array{T, N}) where {T<:JL_SCALAR, N} = begin
 
 	_var
 end
-array(v::Variable, arr::Array{T, N}) where {T<:JL_SCALAR, N} = begin
+idlarray(v::Variable, arr::Array{T, N}) where {T<:JL_SCALAR, N} = begin
 	_v = _mkarray(name(v), arr)
 	@assert v._v == _v
-	array(v)
+	unsafe_idlview(v)
 end
 
-array(name::Symbol, arr::Array{T, N}) where {T<:JL_SCALAR, N} = begin
-	array(Variable(_mkarray(String(name), arr)))
+idlarray(name::Symbol, arr::Array{T, N}) where {T<:JL_SCALAR, N} = begin
+	unsafe_idlview(Variable(_mkarray(String(name), arr)))
 end
 
 
