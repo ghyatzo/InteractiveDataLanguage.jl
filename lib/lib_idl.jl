@@ -252,6 +252,16 @@ struct IDL_ARRAY
     data_guard::IDL_LONG64
 end
 
+# =-=-= CUSTOM ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Base.getproperty(x::Ptr{IDL_ARRAY}, f::Symbol) = begin
+    fieldid = findfirst(==(f), fieldnames(IDL_ARRAY))
+    isnothing(fieldid) && error("IDL_ARRAY does not have the field $f")
+    Ptr{fieldtype(IDL_ARRAY, f)}(x + fieldoffset(IDL_ARRAY, fieldid))
+end
+
+## =-=-= ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 struct _idl_tagdef
     id::Ptr{IDL_IDENT}
     offset::IDL_LONG64
