@@ -19,9 +19,10 @@ module IDL
 
 using StaticArrays
 
-export idlvar, jlscalar, idlview, unsafe_idlview, jlarray
-
-
+export idlrun,
+    idlvar, jlscalar, maketemp,
+    jlview, unsafe_jlview, jlarray,
+    idlsimilar, maketempwrap, idlwrap, idlarray
 
 
 if Sys.isunix()
@@ -42,9 +43,17 @@ end
 
 include("../lib/lib_idl.jl")
 
-# === Manual Wrappers of (maybe) used macros
-IDL_STRING_STR(str::IDL_STRING) = str.slen > 0 ? unsafe_string(str.s) : ""
-IDL_STRING_STR(str_::Ptr{IDL_STRING}) = IDL_STRING_STR(unsafe_load(str_))
+const JL_REF_HOLDING = Dict{Ptr, Ref}()
+
+const CB_HOLDING = Dict{Ptr, Base.CFunction}()
+
+const JL_DROPREF = Ref{Ptr{Cvoid}}()
+
+# longer error messages are given line by line by IDL,
+# so we buffer them in this global for better printing.
+const ERROR_MSG = Ref{String}("")
+
+const OUTPUT_CB = Ref{Ptr{Cvoid}}()
 
 # === InitData Default Constructor
 IDL_INIT_DATA(init_options::Int64) = IDL_INIT_DATA(convert(IDL_INIT_DATA_OPTIONS_T, init_options))
@@ -57,38 +66,24 @@ function IDL_INIT_DATA(init_options::IDL_INIT_DATA_OPTIONS_T)
     end
 end
 
-Base.getproperty(x::Ptr{IDL_ARRAY}, f::Symbol) = begin
-    fieldid = findfirst(==(f), fieldnames(IDL_ARRAY))
-    isnothing(fieldid) && error("IDL_ARRAY does not have the field $f")
-    Ptr{fieldtype(IDL_ARRAY, f)}(x + fieldoffset(IDL_ARRAY, fieldid))
-end
-
-const JL_REF_HOLDING = Dict{Ptr, Ref}()
-
-free_jl_array_ref(_p::Ptr{Cuchar}) = begin
-    @debug "Dropping pointer: $_p"
+function jl_drop_array_ref(_p::Ptr{Cuchar})::Cvoid
+    @info "Dropping pointer: $_p"
     delete!(JL_REF_HOLDING, _p)
-    nothing
+    return nothing
 end
 
-preserve_ref(_x::Ptr, x::Ref) = begin
+function preserve_ref(_x::Ptr, x::Ref)
     JL_REF_HOLDING[_x] = x
-    _x
+    return _x
 end
 
-preserve_ref(x::Ref) = begin
-    _x = pointer_from_objref(x)
-    JL_REF_HOLDING[_x] = x
-    _x
-end
+preserve_cb(_x::Ptr, cb::Base.CFunction) = CB_HOLDING[_x] = cb
 
-const ERROR_MSG = Ref{String}("")
 
 function output_callback(flags, buf::Ptr{UInt8}, n)::Cvoid
 
     msg = n > 0 ? unsafe_string(buf, n) : ""
     nl = (flags & IDL_TOUT_F_NLPOST) != 0 ? "\n" : ""
-
 
     if (flags & IDL_TOUT_F_STDERR) != 0
         ERROR_MSG[] *= "$msg" * nl
@@ -100,10 +95,9 @@ function output_callback(flags, buf::Ptr{UInt8}, n)::Cvoid
     else
         print(msg * nl)
     end
-end
 
-const OUTPUT_CB = Ref{Ptr{Cvoid}}()
-const FREE_JLARR = Ref{Ptr{Cvoid}}()
+    return nothing
+end
 
 
 include("type_conversion.jl")
@@ -113,15 +107,18 @@ include("variables.jl")
 include("arrays.jl")
 
 function Base.getindex(v::Variable)
-    isarray(v) && return (@inbounds idlview(v))
+    isarray(v) && return jlview(v)
     return jlscalar(v)
 end
-Base.setindex!(v::Variable, x::T) where {T<:JL_SCALAR} = set!(v, x)
-Base.setindex!(v::Variable, x::AbstractString) = set!(v, x)
+function Base.getindex(tv::TemporaryVariable)
+    isarray(tv) && return jlview(tv)
+    return jlscalar(tv)
+end
+Base.setindex!(v::AbstractIDLVariable, x::T) where {T<:Union{JL_SCALAR, AbstractString}} = set!(v, x)
 
 # include("structs.jl")
 # include("common.jl")
-execute(string::AbstractString) = begin
+idlrun(string::AbstractString) = begin
     # remove comments and coalesce line breaks
     string = replace(replace(string, r";.*" => ""), r"\$\s*\n" => "")
     iostring = IOBuffer(string)
@@ -152,9 +149,7 @@ function __init__()
     # See: https://discourse.julialang.org/t/julia-crashes-when-using-a-cfunction-from-another-module/98576/2
 
     OUTPUT_CB[] = @cfunction(output_callback, Cvoid, (Cint, Ptr{UInt8}, Cint))
-    FREE_JLARR[] = @cfunction(free_jl_array_ref, Nothing, (Ptr{Cuchar},))
-
-
+    JL_DROPREF[] = @cfunction(jl_drop_array_ref, Nothing, (Ptr{Cuchar},))
 
     IDL_ToutPush(OUTPUT_CB[])
 
@@ -162,4 +157,4 @@ function __init__()
     #idl_repl()
 end
 
-end
+end # module
