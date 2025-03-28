@@ -2,13 +2,13 @@
 	@testset for (i, pair) in enumerate(IDL_SCALAR_TYPES)
 		T, Tstr = pair
 		if T == ComplexF32 || T == ComplexF64
-			IDL.execute("v = $Tstr(5, 0)")
+			idlrun("v = $Tstr(5, 0)")
 		else
-			IDL.execute("v = 5$Tstr")
+			idlrun("v = 5$Tstr")
 		end
 
-		v = IDL.var(:v)
-		v2 = IDL.var(:v2, T(5))
+		v = idlvar(:v)
+		v2 = idlvar(:v2, T(5))
 
 		@test v[] == T(5)
 		@test v2[] == T(5)
@@ -24,9 +24,9 @@
 	end
 
 	@testset "Strings" begin
-		IDL.execute("v = 'Hello!'")
+		idlrun("v = 'Hello!'")
 
-		v = IDL.var(:v)
+		v = idlvar(:v)
 
 		@test v[] == "Hello!"
 
