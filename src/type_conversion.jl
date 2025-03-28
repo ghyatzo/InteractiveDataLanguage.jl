@@ -93,6 +93,8 @@ _alltypes_sym(t::IDL_TYP) = begin
 	:NULL
 end
 
+IDL_STRING_STR(str::IDL_STRING) = str.slen > 0 ? unsafe_string(str.s) : ""
+IDL_STRING_STR(str_::Ptr{IDL_STRING}) = IDL_STRING_STR(unsafe_load(str_))
 
 Base.convert(::Type{String}, x::IDL_STRING) = IDL_STRING_STR(x)
 Base.convert(::Type{IDL_STRING}, s::String) = begin
