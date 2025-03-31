@@ -55,7 +55,6 @@ struct UnsafeView{T, N, V} <: AbstractArrayView{T, N}
 	offset::UInt
 
 	function UnsafeView(v::V, offset=0) where V <: AbstractIDLVariable
-		@boundscheck checkarray(v)
 		N = _ndims(_array(v))
 		T = eltype(v)
 		return new{T, N, V}(v, offset)
@@ -69,8 +68,8 @@ _ptr(x::UnsafeView{<:AbstractString}) = Ptr{IDL_STRING}(_data(_array(x)) + x.off
 
 mutable struct ArrayView{T, N, V} <: AbstractArrayView{T, N}
 	v::V
-	_arr::Ptr{IDL_ARRAY}
 	safety::Bool
+	_arr::Ptr{IDL_ARRAY}
 
 	function ArrayView(v::V) where V <: AbstractIDLVariable
 		N = _ndims(_array(v))
@@ -130,6 +129,7 @@ _ptr(x::ArrayView{T}) where {T} = Ptr{T}(_data(_array(x)))
 _ptr(x::ArrayView{<: AbstractString}) = Ptr{IDL_STRING}(_data(_array(x)))
 
 idlvar(x::ArrayView) = x.v
+idlvar(name::Symbol, x::Array{T, N}) where {T<:JL_SCALAR, N} = idlarray(name, x)
 
 # From IDL memory to Julia
 unsafe_jlview(v::AbstractIDLVariable) = UnsafeView(v)
@@ -174,7 +174,7 @@ function maketempwrap(arr::Array{T,N}) where {T<:JL_SCALAR, N}
 	TemporaryVariable(_var)
 end
 
-function maketemp(arr::Array{T, N}) where {T, N}
+function maketemp(arr::Array{T, N}) where {T<:JL_SCALAR, N}
 	tmpvar = idlsimilar(arr)
 	copyto!(unsafe_jlview(tmpvar), arr)
 
@@ -196,7 +196,7 @@ end
 idlwrap(v::Variable, arr::Array{T, N}) where {T<:JL_SCALAR, N} = idlwrap(Symbol(name(v)), arr)
 
 
-function idlarray(v::Variable, arr::Array{T, N}) where {T, N}
+function idlarray(v::Variable, arr::Array{T, N}) where {T<:JL_SCALAR, N}
 
 	tmpvar = idlsimilar(arr)
 	idlcopyvar!(v, tmpvar)
@@ -205,7 +205,7 @@ function idlarray(v::Variable, arr::Array{T, N}) where {T, N}
 	return v
 end
 
-idlarray(name::Symbol, arr::Array{T, N}) where {T,N} = idlarray(idlvar(name), arr)
+idlarray(name::Symbol, arr::Array{T, N}) where {T<:JL_SCALAR, N} = idlarray(idlvar(name), arr)
 
 
 
