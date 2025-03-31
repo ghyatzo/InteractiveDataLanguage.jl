@@ -43,18 +43,6 @@ end
 
 include("../lib/lib_idl.jl")
 
-const JL_REF_HOLDING = Dict{Ptr, Ref}()
-
-const CB_HOLDING = Dict{Ptr, Base.CFunction}()
-
-const JL_DROPREF = Ref{Ptr{Cvoid}}()
-
-# longer error messages are given line by line by IDL,
-# so we buffer them in this global for better printing.
-const ERROR_MSG = Ref{String}("")
-
-const OUTPUT_CB = Ref{Ptr{Cvoid}}()
-
 # === InitData Default Constructor
 IDL_INIT_DATA(init_options::Int64) = IDL_INIT_DATA(convert(IDL_INIT_DATA_OPTIONS_T, init_options))
 function IDL_INIT_DATA(init_options::IDL_INIT_DATA_OPTIONS_T)
@@ -66,21 +54,33 @@ function IDL_INIT_DATA(init_options::IDL_INIT_DATA_OPTIONS_T)
     end
 end
 
-function jl_drop_array_ref(_p::Ptr{Cuchar})::Cvoid
+
+# === CALLBACKS and REFERENCE ROOTING
+const JL_ARR_ROOT = Dict{Ptr, Ref}()
+
+const CB_HOLDING = Dict{Ptr, Base.Callable}()
+
+# longer error messages are given line by line by IDL,
+# so we buffer them in this global for better printing.
+const ERROR_MSG = Ref{String}("")
+
+@inline preserve_ref(_x::Ptr, x::Ref) = (JL_ARR_ROOT[_x] = x; return _x)
+@inline preserve_cb(_x::Ptr, cb::Base.Callable) = CB_HOLDING[_x] = cb
+
+const __JL_DROPREF = Ref{Ptr{Cvoid}}()
+
+const __PASSTHROUGH_CB = Ref{Ptr{Cvoid}}()
+
+const __OUTPUT_CB = Ref{Ptr{Cvoid}}()
+
+
+function __jl_drop_array_ref(_p::Ptr{Cuchar})::Cvoid
     @info "Dropping pointer: $_p"
-    delete!(JL_REF_HOLDING, _p)
+    delete!(JL_ARR_ROOT, _p)
     return nothing
 end
 
-function preserve_ref(_x::Ptr, x::Ref)
-    JL_REF_HOLDING[_x] = x
-    return _x
-end
-
-preserve_cb(_x::Ptr, cb::Base.CFunction) = CB_HOLDING[_x] = cb
-
-
-function output_callback(flags, buf::Ptr{UInt8}, n)::Cvoid
+function __output_callback(flags, buf::Ptr{UInt8}, n)::Cvoid
 
     msg = n > 0 ? unsafe_string(buf, n) : ""
     nl = (flags & IDL_TOUT_F_NLPOST) != 0 ? "\n" : ""
@@ -99,6 +99,11 @@ function output_callback(flags, buf::Ptr{UInt8}, n)::Cvoid
     return nothing
 end
 
+function __passthrough_callback(_p::Ptr{Cuchar})::Cvoid
+    cb = CB_HOLDING[_p]::Base.Callable
+    cb(_p)
+    return nothing
+end
 
 include("type_conversion.jl")
 
@@ -148,10 +153,11 @@ function __init__()
     # and not during compilation.
     # See: https://discourse.julialang.org/t/julia-crashes-when-using-a-cfunction-from-another-module/98576/2
 
-    OUTPUT_CB[] = @cfunction(output_callback, Cvoid, (Cint, Ptr{UInt8}, Cint))
-    JL_DROPREF[] = @cfunction(jl_drop_array_ref, Nothing, (Ptr{Cuchar},))
+    __OUTPUT_CB[] = @cfunction(__output_callback, Cvoid, (Cint, Ptr{UInt8}, Cint))
+    __JL_DROPREF[] = @cfunction(__jl_drop_array_ref, Nothing, (Ptr{Cuchar},))
+    __PASSTHROUGH_CB[] = @cfunction(__passthrough_callback, Nothing, (Ptr{Cuchar},))
 
-    IDL_ToutPush(OUTPUT_CB[])
+    IDL_ToutPush(__OUTPUT_CB[])
 
     # Initializing REPL
     #idl_repl()

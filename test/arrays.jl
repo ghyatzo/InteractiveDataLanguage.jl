@@ -1,59 +1,58 @@
-# @testset "GET: Arrays of scalars" begin
+@testset "GET: Arrays of scalars" begin
 
-# 	@testset for (jltype, idlsuffix) in IDL_SCALAR_TYPES
+	@testset for (jltype, idlsuffix) in IDL_SCALAR_TYPES
 
-# 		if jltype == ComplexF32 || jltype == ComplexF64
-# 			array_string = "[" * join(fill("$idlsuffix(5, 0)", 5), ',') * "]"
-# 		else
-# 			array_string = "[" * join(fill("5$idlsuffix", 5), ',') * "]"
-# 		end
+		if jltype == ComplexF32 || jltype == ComplexF64
+			array_string = "[" * join(fill("$idlsuffix(5, 0)", 5), ',') * "]"
+		else
+			array_string = "[" * join(fill("5$idlsuffix", 5), ',') * "]"
+		end
 
-# 		idlrun("var = $array_string")
+		idlrun("var = $array_string")
 
-# 		var = idlvar(:var)
+		var = idlvar(:var)
 
-# 		@test jlarray(var) isa Array{jltype, 1}
-# 		@test length(unsafe_jlview(var)) == 5
+		@test jlarray(var) isa Array{jltype, 1}
+		@test length(unsafe_jlview(var)) == 5
 
-# 		@test var[] isa AbstractArray{jltype, 1}
-# 		@test var[] == jltype[5, 5, 5, 5, 5]
+		@test var[] isa AbstractArray{jltype, 1}
+		@test var[] == jltype[5, 5, 5, 5, 5]
 
-# 		@test var[][1] == jltype(5)
-# 		var[][2] = jltype(6)
-# 		@test var[] == jltype[5, 6, 5, 5, 5]
+		@test var[][1] == jltype(5)
+		var[][2] = jltype(6)
+		@test var[] == jltype[5, 6, 5, 5, 5]
 
-# 		arrview = jlview(var)
-# 		idlrun("var = [var, 6]")
-# 		@test_throws InvalidStateException arrview[1]
-# 	end
+		arrview = jlview(var)
+		idlrun("var = [var, 6]")
+		@test_throws InvalidStateException arrview[1]
+	end
 
-# 	@testset "Strings" begin
-# 		idlrun("var = ['Hello', 'IDL']")
+	@testset "Strings" begin
+		idlrun("var = ['Hello', 'IDL']")
 
-# 		var = idlvar(:var)
+		var = idlvar(:var)
 
-# 		@test jlarray(var) isa Array{String, 1}
-# 		@test length(unsafe_jlview(var)) == 2
+		@test jlarray(var) isa Array{String, 1}
+		@test length(unsafe_jlview(var)) == 2
 
-# 		@test var[] isa AbstractArray{String, 1}
-# 		@test var[] == ["Hello", "IDL"]
+		@test var[] isa AbstractArray{String, 1}
+		@test var[] == ["Hello", "IDL"]
 
-# 		@test var[][1] == "Hello"
-# 		var[][2] = "World"
-# 		@test var[] == ["Hello", "World"]
+		@test var[][1] == "Hello"
+		var[][2] = "World"
+		@test var[] == ["Hello", "World"]
 
-# 		arrview = jlview(var)
-# 		idlrun("var = [var, 'RIIIR']")
-# 		@test_throws InvalidStateException arrview[1]
-# 	end
-# end
+		arrview = jlview(var)
+		idlrun("var = [var, 'RIIIR']")
+		@test_throws InvalidStateException arrview[1]
+	end
+end
 
 @testset "PUT: Arrays of scalars" begin
 
 	idlrun("var = []")
 	@testset for type in first.(IDL_SCALAR_TYPES)
 	# @testset for type in [Int, UInt]
-		@info type
 		arr = type[1, 2, 3, 4, 5]
 
 		var = idlvar(:var)
@@ -75,8 +74,8 @@
 		@test wrap[] isa AbstractArray{type, 1}
 		@test all(wrap[] .== arr)
 
-		# wrap[][1] = type(10)
-		# @test arr[1] == type(10)
+		wrap[][1] = type(10)
+		@test arr[1] == type(10)
 
 	end
 

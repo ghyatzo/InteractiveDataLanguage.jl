@@ -69,40 +69,44 @@ _ptr(x::UnsafeView{<:AbstractString}) = Ptr{IDL_STRING}(_data(_array(x)) + x.off
 
 mutable struct ArrayView{T, N, V} <: AbstractArrayView{T, N}
 	v::V
-	safety::Bool
 	_arr::Ptr{IDL_ARRAY}
+	safety::Bool
 
 	function ArrayView(v::V) where V <: AbstractIDLVariable
 		N = _ndims(_array(v))
 		T = eltype(v)
 		_arr = _array(v)
-		this = new{T, N, V}(v, true, _arr)
 
-		cb = @cfunction($((_p::Ptr{Cuchar}) -> begin
+		this = new{T, N, V}(v, true, _arr)
+		weakthis = WeakRef(this)
+
+		cb = (_p::Ptr{Cuchar}) -> begin
 			# This callback assumes that when it is called, a valid reference to
 			# `this` still exists and has not been gc'ed.
-			# safeprintln("$(name(v)) FREED FROM IDL")
-			setfield!(this, :safety, false)
+			# we need to hold a weak ref so that storing the cb does not prevent the view from being gc'ed.
+			local this = weakthis.value
+			if this !== nothing
+				setfield!(this, :safety, false)
+			end
+			# if called, it means that the data is not valid anymore, delete in any case.
 			delete!(CB_HOLDING, _p)
-
-			return nothing
-		end), Nothing, (Ptr{Cuchar},))
+		end
 
 		# each callback is associated with the array data pointer
 		# that, when freed, would call it
 		preserve_cb(_data(_arr), cb)
-		_set_free_cb(_array(v), Base.unsafe_convert(Ptr{Cvoid}, cb))
+		_set_free_cb(_array(v), __PASSTHROUGH_CB[])
 
 		finalizer(this) do this
 			# We must check that the data has not been freed, since this finalizer
 			# can also be called after the IDL data has been freed!
 			#
 			# If the IDL Array has already been freed (safety false), while this view was still alive
-			# Then the original callback has been called successfully and all is good.
+			# Then the original callback has been called successfully and all is gucci.
 			if getfield(this, :safety)
-				# this means that the IDL array is still alive.
+				# otherwise the IDL array is still alive.
 				# we can unset the callback and delete its ref.
-				# safeprintln("$(name(this.v)) FREED FROM JULIA")
+
 				_set_free_cb(this._arr, C_NULL)
 				delete!(CB_HOLDING, _data(this._arr))
 
@@ -164,7 +168,7 @@ function maketempwrap(arr::Array{T,N}) where {T<:JL_SCALAR, N}
 	_rooted_data = preserve_ref(pointer(arr), arr.ref)
 
 	_var = IDL_ImportArray(
-		N, idldims(arr), idltype(T), _rooted_data, JL_DROPREF[], C_NULL
+		N, idldims(arr), idltype(T), _rooted_data, __JL_DROPREF[], C_NULL
 	)
 
 	TemporaryVariable(_var)
@@ -183,7 +187,7 @@ function idlwrap(name::Symbol, arr::Array{T, N}) where {T<:JL_SCALAR, N}
 	_rooted_data = preserve_ref(pointer(arr), arr.ref)
 
 	_var = IDL_ImportNamedArray(
-		name, N, idldims(arr), idltype(T), _rooted_data, JL_DROPREF[], C_NULL
+		name, N, idldims(arr), idltype(T), _rooted_data, __JL_DROPREF[], C_NULL
 	)
 
 	return Variable(_var)
