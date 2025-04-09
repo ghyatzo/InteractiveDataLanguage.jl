@@ -1,6 +1,8 @@
 [general]
 library_name = "libidl"
-output_file_path = "lib/lib_idl.jl"
+
+output_file_path = "../lib/lib_idl.jl"
+
 export_symbol_prefixes = ["IDL_"]
 
 [codegen]
