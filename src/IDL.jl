@@ -17,7 +17,8 @@ module IDL
 # [14] https://discourse.julialang.org/t/cconvert-and-unsafe-convert-with-immutable-struct-containing-a-pointer/124479/5
 # [15] https://github.com/tk3369/julia-notebooks/blob/master/ccall%20-%20using%20cconvert%20and%20unsafe_convert.ipynb
 
-using StaticArrays
+using CEnum: CEnum, @cenum
+using StaticArrays: StaticArrays, SizedVector
 
 export idlrun,
     idlvar, jlscalar, maketemp,

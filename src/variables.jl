@@ -60,7 +60,7 @@ isfile(v::AbstractIDLVariable) = (varflags(v) & IDL_V_FILE) != 0
 isdynamic(v::AbstractIDLVariable) = (varflags(v) & IDL_V_DYNAMIC) != 0
 isarray(v::AbstractIDLVariable) = (varflags(v) & IDL_V_ARR) != 0
 isstruct(v::AbstractIDLVariable) = (varflags(v) & IDL_V_STRUCT) != 0
-isscalar(v::AbstractIDLVariable) = !isarray(v) && !IDL.isfile(v)
+isscalar(v::AbstractIDLVariable) = !isarray(v) && !isfile(v)
 isboolean(v::AbstractIDLVariable) = ((varflags(v) & IDL_V_BOOLEAN) != 0) && (vartype(v) == T_BYTE)
 issimplearray(v::AbstractIDLVariable) = isarray(v) && !isstruct(v)
 Base.isnothing(v::AbstractIDLVariable) = (varflags(v) & IDL_V_NULL) != 0
@@ -160,7 +160,7 @@ end
 # Complex numbers get truncated. Only the real part gets translated.
 # In line with IDL behaviour
 Base.convert(::Type{String}, v::AbstractIDLVariable) = begin
-	IDL.eltype(v) == String || throw(ArgumentError("The IDL variable is not a string type"))
+	eltype(v) == String || throw(ArgumentError("The IDL variable is not a string type"))
 	unsafe_string(IDL_VarGetString(v._v))
 end
 
@@ -252,7 +252,7 @@ function Base.show(io::IO, s::AbstractIDLVariable)
 	tempstr = istemp(s) ? "TEMP " : ""
 	validstr = isvalid(s) ? "" : "UNDEF"
 
-	variablename = unsafe_string(IDL.IDL_VarName(s._v))
+	variablename = unsafe_string(IDL_VarName(s._v))
 
 	print(io, "IDL.Variable: $conststr$tempstr'$variablename' - $validstr")
 	isvalid(s) || return

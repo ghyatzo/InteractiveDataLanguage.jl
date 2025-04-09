@@ -1,6 +1,9 @@
-using IDL, Test
+using IDL
+using Test
+using JET
+using ExplicitImports
 
-ENV["JULIA_TEST_FAILFAST"] = true
+print_explicit_imports(IDL)
 
 const IDL_SCALAR_TYPES = [
 	UInt8 => "B",

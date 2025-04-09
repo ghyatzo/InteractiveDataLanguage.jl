@@ -1,7 +1,5 @@
 # module LibIDL
 
-using CEnum
-
 const IDL_LONG64 = Clonglong
 
 const IDL_ULONG64 = Culonglong
