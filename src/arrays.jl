@@ -193,6 +193,13 @@ function maketemp(arr::Array{T, N}) where {T<:JL_SCALAR, N}
 	return tmpvar
 end
 
+function maketemp(arr::Array{<:AbstractString, N}) where {N}
+	tmpvar = idlsimilar(arr)
+	copyto!(unsafe_jlview(tmpvar), arr)
+
+	return tmpvar
+end
+
 function idlwrap(name::Symbol, arr::Array{T, N}) where {T<:JL_SCALAR, N}
 	checkdims(arr)
 
@@ -206,7 +213,6 @@ function idlwrap(name::Symbol, arr::Array{T, N}) where {T<:JL_SCALAR, N}
 end
 
 idlwrap(v::Variable, arr::Array{T, N}) where {T<:JL_SCALAR, N} = idlwrap(Symbol(name(v)), arr)
-
 
 function idlarray(v::Variable, arr::Array{T, N}) where {T<:JL_SCALAR, N}
 

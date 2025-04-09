@@ -7,7 +7,7 @@ const JL_SCALAR = Union{
 	Float64,
 	ComplexF32,
 	# String
-	# struct
+	# Struct
 	ComplexF64,
 	# Ptr
 	# Objref
