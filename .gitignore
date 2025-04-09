@@ -4,3 +4,4 @@ _*
 *.pdf
 *.c
 *.dll
+*Manifest.toml
