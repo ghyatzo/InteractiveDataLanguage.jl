@@ -9,7 +9,6 @@ _data(_a::Ptr{IDL_ARRAY}) = unsafe_load(_a.data)
 _set_free_cb(_arr::Ptr{IDL_ARRAY}, cb::Ptr{Cvoid}) = unsafe_store!(_arr.free_cb, cb)
 
 
-
 checkdims(::AbstractArray{T, N}) where {T,N} =
 	N > IDL_MAX_ARRAY_DIM && throw(ArgumentError("IDL Arrays can have at most $IDL_MAX_ARRAY_DIM dimensions."))
 
@@ -21,7 +20,7 @@ Base.IndexStyle(::AbstractArrayView) = IndexLinear()
 
 Base.eltype(::Type{AbstractArrayView{T, N}}) where {T, N} = T
 
-Base.size(x::AbstractArrayView) = _size(_array(x))[1:ndims(x)]
+Base.size(x::AbstractArrayView{T, N}) where {T,N} = @inbounds _size(_array(x))[1:N]
 Base.size(x::AbstractArrayView, d) = _size(_array(x), d)
 Base.length(x::AbstractArrayView) = _length(_array(x))
 Base.firstindex(x::AbstractArrayView) = 1
@@ -61,7 +60,7 @@ struct UnsafeView{T, N, V} <: AbstractArrayView{T, N}
 	end
 end
 
-_array(x::UnsafeView) = unsafe_load(_varptr(x.v).value.arr)
+_array(x::UnsafeView) = _var_array(_varptr(x.v))
 _ptr(x::UnsafeView{T}) where {T} = Ptr{T}(_data(_array(x)) + x.offset)
 _ptr(x::UnsafeView{<:AbstractString}) = Ptr{IDL_STRING}(_data(_array(x)) + x.offset)
 
@@ -89,6 +88,8 @@ mutable struct ArrayView{T, N, V} <: AbstractArrayView{T, N}
 			end
 			# if called, it means that the data is not valid anymore, delete in any case.
 			delete!(CB_HOLDING, _p)
+
+			return nothing
 		end
 
 		# each callback is associated with the array data pointer
@@ -105,7 +106,6 @@ mutable struct ArrayView{T, N, V} <: AbstractArrayView{T, N}
 			if getfield(this, :safety)
 				# otherwise the IDL array is still alive.
 				# we can unset the callback and delete its ref.
-
 				_set_free_cb(this._arr, C_NULL)
 				delete!(CB_HOLDING, _data(this._arr))
 
@@ -120,11 +120,12 @@ end
 function safetycheck(x::ArrayView)
 	getfield(x, :safety) || throw(InvalidStateException("""
 		The array the view was pointing to has been freed.\n
-		To keep using this variable extract the variable pointer by calling the `var` method.""",
+		To continue using the binding convert it back to a generic variable with `idlvar`.""",
 	:ArrayView))
+
 end
 
-_array(x::ArrayView) = safetycheck(x) && _array(x.v)
+_array(x::ArrayView) = (safetycheck(x); return _array(x.v))
 _ptr(x::ArrayView{T}) where {T} = Ptr{T}(_data(_array(x)))
 _ptr(x::ArrayView{<: AbstractString}) = Ptr{IDL_STRING}(_data(_array(x)))
 
@@ -143,6 +144,9 @@ jlarray(v::AbstractIDLVariable) = jlarray(unsafe_jlview(v))
 jlarray(name::Symbol) = jlarray(idlvar(name))
 
 # From Julia Memory to IDL
+
+# Initialize a container for specifying the dimensions passed through the ccall.
+# IDL will copy its contents, so we can reuse it.
 const DIMS = SizedVector{IDL_MAX_ARRAY_DIM}(zeros(IDL_MEMINT, IDL_MAX_ARRAY_DIM))
 
 function idldims(arr::AbstractArray{T, N}) where {T, N}
@@ -157,7 +161,7 @@ end
 function idlsimilar(arr::AbstractArray{T, N}) where {T, N}
 	_tmpvarref = Ref{Ptr{IDL_VARIABLE}}()
 
-	IDL_MakeTempArray(idltype(T), N, idldims(arr), IDL_ARR_INI_NOP, _tmpvarref)
+	IDL_MakeTempArray(T_STRING, N, idldims(arr), IDL_ARR_INI_NOP, _tmpvarref)
 
 	return TemporaryVariable(_tmpvarref[])
 end

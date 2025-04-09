@@ -42,7 +42,6 @@ else # Windows
 end
 
 include("../lib/lib_idl.jl")
-
 # === InitData Default Constructor
 IDL_INIT_DATA(init_options::Int64) = IDL_INIT_DATA(convert(IDL_INIT_DATA_OPTIONS_T, init_options))
 function IDL_INIT_DATA(init_options::IDL_INIT_DATA_OPTIONS_T)
@@ -53,7 +52,6 @@ function IDL_INIT_DATA(init_options::IDL_INIT_DATA_OPTIONS_T)
         ref[]
     end
 end
-
 
 # === CALLBACKS and REFERENCE ROOTING
 const JL_ARR_ROOT = Dict{Ptr, Ref}()
@@ -77,6 +75,14 @@ const __OUTPUT_CB = Ref{Ptr{Cvoid}}()
 function __jl_drop_array_ref(_p::Ptr{Cuchar})::Cvoid
     @info "Dropping pointer: $_p"
     delete!(JL_ARR_ROOT, _p)
+
+    return nothing
+end
+
+function __passthrough_callback(_p::Ptr{Cuchar})::Cvoid
+    cb::Base.Callable = CB_HOLDING[_p]
+    cb(_p)
+
     return nothing
 end
 
@@ -99,11 +105,7 @@ function __output_callback(flags, buf::Ptr{UInt8}, n)::Cvoid
     return nothing
 end
 
-function __passthrough_callback(_p::Ptr{Cuchar})::Cvoid
-    cb = CB_HOLDING[_p]::Base.Callable
-    cb(_p)
-    return nothing
-end
+
 
 include("type_conversion.jl")
 

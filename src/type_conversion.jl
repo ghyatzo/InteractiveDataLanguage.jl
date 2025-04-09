@@ -73,6 +73,7 @@ idltype(::Type{UInt32}) = T_ULONG
 idltype(::Type{Int64}) = T_LONG64
 idltype(::Type{UInt64}) = T_ULONG64
 
+_alltypes_sym(t::UInt8) = _alltypes_sym(IDL_TYP(t))
 _alltypes_sym(t::IDL_TYP) = begin
 	t == T_UNDEF ? :NULL :
 	t == T_BYTE ? :c :

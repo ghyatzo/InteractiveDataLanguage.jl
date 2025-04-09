@@ -34,17 +34,22 @@
 # idl doesn't like '#'
 idlgensym(tag="jl") = replace(String(gensym(tag)), "#" => "_")
 
-_varflags(_var::Ptr{IDL_VARIABLE}) = unsafe_load(_var.flags)
-_vartype(_var::Ptr{IDL_VARIABLE}) = unsafe_load(_var.type)
-_varinfo(_var::Ptr{IDL_VARIABLE}) = (_varflags(_var), _vartype(_var))
+_var_flags(_var::Ptr{IDL_VARIABLE}) = unsafe_load(_var.flags)
+_var_type(_var::Ptr{IDL_VARIABLE}) = unsafe_load(_var.type)
+_var_info(_var::Ptr{IDL_VARIABLE}) = (_var_flags(_var), _var_type(_var))
+_var_array(_var::Ptr{IDL_VARIABLE}) = unsafe_load(_var.value.arr)
+_var_sdef(_var::Ptr{IDL_VARIABLE}) = unsafe_load(_var.value.s)
+_var_scalar(_var::Ptr{IDL_VARIABLE}) =
+	unsafe_load(Base.getproperty(_var.value, _alltypes_sym(_var_type(_var))))
+
 
 const ALL_T = Ref{IDL_ALLTYPES}()
 
 abstract type AbstractIDLVariable end
 function _varptr end
 
-varflags(v::AbstractIDLVariable) = _varflags(_varptr(v))
-vartype(v::AbstractIDLVariable) = IDL_TYP(_vartype(_varptr(v)))
+varflags(v::AbstractIDLVariable) = _var_flags(_varptr(v))
+vartype(v::AbstractIDLVariable) = IDL_TYP(_var_type(_varptr(v)))
 Base.eltype(v::AbstractIDLVariable) = jltype(vartype(v))
 name(v::AbstractIDLVariable) = unsafe_string(IDL_VarName(_varptr(v)))
 
@@ -63,17 +68,12 @@ Base.isnothing(v::AbstractIDLVariable) = (varflags(v) & IDL_V_NULL) != 0
 
 ## TODO: maybe use the internal "ENSURE etc etc" functions from idl.
 isvalid(v::AbstractIDLVariable) = vartype(v) != T_UNDEF
-checkvalid(v::AbstractIDLVariable) = isvalid(v) || throw(UndefVarError(v, "IDL"))
+checkvalid(v::AbstractIDLVariable) = isvalid(v) || throw(UndefVarError(Symbol(name(v)), "IDL"))
 checkarray(v::AbstractIDLVariable) = isarray(v) || throw(ErrorException("The variable is not an array."))
 checkstruct(v::AbstractIDLVariable) = isstruct(v) || throw(ErrorException("The variable is not a structure."))
 checkscalar(v::AbstractIDLVariable) = isscalar(v) || throw(ErrorException("The variable is not a scalar."))
 
-_array(v::AbstractIDLVariable) = checkvalid(v) && checkarray(v) && unsafe_load(_varptr(v).value.arr)
-_sdef(v::AbstractIDLVariable) = checkvalid(v) && checkstruct(v) && _varptr(v).value.s
-_scalar(v::AbstractIDLVariable) = begin
-	checkvalid(v) && checkscalar(v)
-	Base.getproperty(_varptr(v).value, _alltypes_sym(vartype(v)))
-end
+_array(v::AbstractIDLVariable) = (checkarray(v); return _var_array(_varptr(v)))
 
 idlcopyvar!(dst::AbstractIDLVariable, src::AbstractIDLVariable) = IDL_VarCopy(_varptr(src), _varptr(dst))
 
@@ -81,7 +81,7 @@ mutable struct Variable <: AbstractIDLVariable
 	_v::Ptr{IDL_VARIABLE}
 
 	function Variable(_v::Ptr{IDL_VARIABLE})
-		var_f, var_t = _varinfo(_v)
+		var_f, var_t = _var_info(_v)
 
 		if (var_f & IDL_V_FILE) != 0
 			error("File Variables not yet implemented")
@@ -96,28 +96,28 @@ end
 
 _varptr(v::Variable) = v._v
 
-safeprintln(str) = ccall(:jl_safe_printf, Cvoid, (Cstring, ), str * "\n")
+safeprintln(str::String) = ccall(:jl_safe_printf, Cvoid, (Cstring, ), str * "\n")
 mutable struct TemporaryVariable <: AbstractIDLVariable
 	_v::Ptr{IDL_VARIABLE}
-	freed::Bool
+	safety::Bool
 
 	function TemporaryVariable(_v::Ptr{IDL_VARIABLE})
-		var_f, var_t = _varinfo(_v)
+		var_f, var_t = _var_info(_v)
 
 		var_f & IDL_V_TEMP != 0 || error("The variable pointer needs to be pointing to a temporary variable.")
-		this = new(_v, false)
+		this = new(_v, true)
 
 		finalizer(this) do this
-			if !this.freed
+			if this.safety
+				setfield!(this, :safety, false)
 				IDL_Deltmp(this._v)
-				setfield!(this, :freed, true)
 			end
 		end
 	end
 end
 
 _varptr(v::TemporaryVariable) = begin
-	v.freed && return nothing
+	v.safety || throw(ErrorException("The temporary variable has been freed."))
 	return v._v
 end
 deltemp(tv::TemporaryVariable) = finalize(tv)
@@ -134,17 +134,15 @@ maketemp(x::Cfloat) = TemporaryVariable(IDL_GettmpFloat(x))
 maketemp(x::Cdouble) = TemporaryVariable(IDL_GettmpDouble(x))
 # maketemp(x::IDL_HVID) = TemporaryVariable(IDL_GettmpPtr(x))
 # maketemp(x::IDL_HVID) = TemporaryVariable(IDL_GettmpObjRef(x)))
+# TODO: maketemp for complex variables?
 
 function idlcopyvar!(dst::AbstractIDLVariable, src::TemporaryVariable)
 	IDL_VarCopy(_varptr(src), _varptr(dst))
 	# VarCopy frees the temporary variable if it's the source.
-
-	setfield!(src, :freed, true)
+	setfield!(src, :safety, false)
 end
 
-
 ### CONVERSION IDL -> JULIA
-
 # for general purpose conversion, we convert, then copy the tmp var into the old var.
 Base.convert(::Type{T}, v::AbstractIDLVariable) where T <: JL_SCALAR = begin
 	isscalar(v) || throw(ArgumentError("Can't convert a non scalar variable into a scalar value."))
@@ -168,7 +166,7 @@ end
 
 Base.convert(::Type{Bool}, v::AbstractIDLVariable) = begin
 	isboolean(v) || throw(ArgumentError("Can't convert a non boolean variable into a Bool value"))
-	Bool(unsafe_load(_scalar(v)))
+	Bool(unsafe_load(_var_scalar(_varptr(v))))
 end
 
 # These attempt automatic transformation which is quicker
