@@ -158,7 +158,15 @@ function idldims(arr::AbstractArray{T, N}) where {T, N}
 	return DIMS
 end
 
-function idlsimilar(arr::AbstractArray{T, N}) where {T, N}
+function idlsimilar(arr::AbstractArray{T, N}) where {T <: JL_SCALAR, N}
+	_tmpvarref = Ref{Ptr{IDL_VARIABLE}}()
+
+	IDL_MakeTempArray(idltype(T), N, idldims(arr), IDL_ARR_INI_NOP, _tmpvarref)
+
+	return TemporaryVariable(_tmpvarref[])
+end
+
+function idlsimilar(arr::AbstractArray{<:AbstractString, N}) where {N}
 	_tmpvarref = Ref{Ptr{IDL_VARIABLE}}()
 
 	IDL_MakeTempArray(T_STRING, N, idldims(arr), IDL_ARR_INI_NOP, _tmpvarref)
