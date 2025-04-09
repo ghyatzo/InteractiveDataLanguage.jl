@@ -38,7 +38,7 @@ function Base.getproperty(x::Ptr{IDL_ALLTYPES}, f::Symbol)
     f === :memint && return Ptr{IDL_LONG64}(x + 0)
     f === :fileint && return Ptr{IDL_LONG64}(x + 0)
     f === :ptrint && return Ptr{IDL_PTRINT}(x + 0)
-    return getfield(x, f)
+    throw(UndefRefError())
 end
 
 function Base.getproperty(x::IDL_ALLTYPES, f::Symbol)
@@ -81,7 +81,7 @@ function Base.getproperty(x::Ptr{IDL_VARIABLE}, f::Symbol)
     f === :flags && return Ptr{Cuchar}(x + fieldoffset(IDL_VARIABLE, 2))
     f === :flags2 && return Ptr{Cuchar}(x + fieldoffset(IDL_VARIABLE, 3))
     f === :value && return Ptr{IDL_ALLTYPES}(x + fieldoffset(IDL_VARIABLE, 4))
-    return getfield(x, f)
+    throw(UndefRefError())
 end
 
 Base.propertynames(::Ptr{IDL_VARIABLE}) = (:type, :flags, :value)
@@ -302,7 +302,7 @@ function Base.getproperty(x::Ptr{IDL_SYSRTN_UNION}, f::Symbol)
     f === :generic && return Ptr{IDL_SYSRTN_GENERIC}(x + 0)
     f === :pro && return Ptr{IDL_SYSRTN_PRO}(x + 0)
     f === :fun && return Ptr{IDL_SYSRTN_FUN}(x + 0)
-    return getfield(x, f)
+    throw(UndefRefError())
 end
 
 function Base.getproperty(x::IDL_SYSRTN_UNION, f::Symbol)
@@ -450,7 +450,7 @@ function Base.getproperty(x::Ptr{IDL_GR_PT}, f::Symbol)
     f === :p && return Ptr{NTuple{4, Cfloat}}(x + 0)
     f === :d_arr && return Ptr{NTuple{4, Cdouble}}(x + 0)
     f === :dev && return Ptr{var"struct (unnamed at include/idl_export.h:1378:3)"}(x + 0)
-    return getfield(x, f)
+    throw(UndefRefError())
 end
 
 function Base.getproperty(x::IDL_GR_PT, f::Symbol)
@@ -539,7 +539,7 @@ end
 function Base.getproperty(x::Ptr{var"union (unnamed at include/idl_export.h:1471:3)"}, f::Symbol)
     f === :draw && return Ptr{IDL_DEVCORE_FCN_DRAW}(x + 0)
     f === :rw_pixels && return Ptr{IDL_DEVCORE_FCN_RW_PIXELS}(x + 0)
-    return getfield(x, f)
+    throw(UndefRefError())
 end
 
 function Base.getproperty(x::var"union (unnamed at include/idl_export.h:1471:3)", f::Symbol)
@@ -561,7 +561,7 @@ function Base.getproperty(x::Ptr{var"union (unnamed at include/idl_export.h:1475
     f === :image && return Ptr{var"struct (unnamed at include/idl_export.h:1476:5)"}(x + 0)
     f === :lines && return Ptr{var"struct (unnamed at include/idl_export.h:1485:5)"}(x + 0)
     f === :fill_style && return Ptr{Cint}(x + 0)
-    return getfield(x, f)
+    throw(UndefRefError())
 end
 
 function Base.getproperty(x::var"union (unnamed at include/idl_export.h:1475:3)", f::Symbol)
@@ -582,7 +582,7 @@ end
 function Base.getproperty(x::Ptr{var"union (unnamed at include/idl_export.h:1494:5)"}, f::Symbol)
     f === :f && return Ptr{Ptr{Cfloat}}(x + 0)
     f === :d && return Ptr{Ptr{Cdouble}}(x + 0)
-    return getfield(x, f)
+    throw(UndefRefError())
 end
 
 function Base.getproperty(x::var"union (unnamed at include/idl_export.h:1494:5)", f::Symbol)
@@ -604,7 +604,7 @@ function Base.getproperty(x::Ptr{var"struct (unnamed at include/idl_export.h:149
     f === :z && return Ptr{var"union (unnamed at include/idl_export.h:1494:5)"}(x + 0)
     f === :precision && return Ptr{Cint}(x + 8)
     f === :shades && return Ptr{Ptr{Cint}}(x + 16)
-    return getfield(x, f)
+    throw(UndefRefError())
 end
 
 function Base.getproperty(x::var"struct (unnamed at include/idl_export.h:1493:3)", f::Symbol)
@@ -629,7 +629,7 @@ function Base.getproperty(x::Ptr{IDL_POLYFILL_ATTR}, f::Symbol)
     f === :extra && return Ptr{var"union (unnamed at include/idl_export.h:1475:3)"}(x + 24)
     f === :three && return Ptr{var"struct (unnamed at include/idl_export.h:1493:3)"}(x + 64)
     f === :pROIState && return Ptr{Ptr{IDL_ROI_STATE}}(x + 88)
-    return getfield(x, f)
+    throw(UndefRefError())
 end
 
 function Base.getproperty(x::IDL_POLYFILL_ATTR, f::Symbol)
@@ -887,7 +887,8 @@ function Base.getproperty(x::Ptr{IDL_INIT_DATA}, f::Symbol)
     f === :clargs && return Ptr{var"struct (unnamed at include/idl_export.h:2375:3)"}(x + 8)
     f === :hwnd && return Ptr{Ptr{Cvoid}}(x + 24)
     f === :bufferlicense && return Ptr{var"struct (unnamed at include/idl_export.h:2390:3)"}(x + 32)
-    return getfield(x, f)
+
+    throw(UndefRefError())
 end
 
 function Base.getproperty(x::IDL_INIT_DATA, f::Symbol)
