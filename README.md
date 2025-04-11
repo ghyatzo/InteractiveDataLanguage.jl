@@ -1,9 +1,10 @@
 # IDL interface for the Julia language
 
-The `IDL.jl` package is an interface for calling IDL from the Julia language.
-You must have a valid IDL license to use IDL from Julia.
+The `IDL.jl` package is a wrapper for the IDL C API for calling IDL from the Julia language. Any IDL code will need to be provided by the users.
+Users are also expected to have a valid licensed Installation of the IDL library in their system, which must be obtained separately.
+This package also assumes your license is correctly set up and provides no functionality nor instructions on how to set up an IDL installation, refer to the official IDL documentation instead.
 
-> [!WARN]
+> [!CAUTION]
 > This package is still in the experimental phase, expect frequent changes.
 
 This package started with an attempt to revive the code from [this package](https://github.com/henry2004y/IDL.jl) which was a fork of [this other package](https://github.com/BobPortmann/IDLCall.jl). But it turned into a complete rewrite.
@@ -23,32 +24,33 @@ This library opted to only support the `Callable` IDL interface due to better er
 and power when managing memory between IDL and Julia.
 
 ## TODO
-Currently the package is in very early stages of development, the API is still in the process of being fleshed out.
+Currently the package is in very early stages of development, the API is still in the process of being ironed out. Any kind of feedback is welcome!
 
 Current support:
-[x] Scalars
-	[x] IDL -> Julia
-	[x] Julia -> IDL
-	[x] Create temporary variables
-[] Arrays
-	[x] IDL -> Julia (No copy data)
-	[x] IDL -> Julia (Copy data)
-	[] Julia -> IDL (No copy data)
-	[] Julia -> IDL (Copy data)
-	[] Initialize IDL arrays from Julia
-[] Structures (depends on the completion of the array interface)
-	[] IDL -> Julia
-	[] Julia -> IDL
-[] Objects
+- [x] Scalars
+	- [x] IDL -> Julia
+	- [x] Julia -> IDL
+	- [x] Create temporary variables
+- [x] Arrays
+	- [x] IDL -> Julia (No copy data)
+	- [x] IDL -> Julia (Copy data)
+	- [x] Julia -> IDL (No copy data)
+	- [x] Julia -> IDL (Copy data)
+	- [x] Initialize IDL arrays from Julia
+	- [x] Create temporary arrays
+- [ ] Structures
+	- [ ] IDL -> Julia
+	- [ ] Julia -> IDL
+- [ ] Objects
 
 Extras:
-[] REPL Mode (`IDL>` prompt)
-[] `@idl_str` macro
-[] automatic interpolation of variables from julia and idl
+- [ ] REPL Mode (`IDL>` prompt)
+- [ ] `@idl_str` macro
+- [ ] automatic interpolation of variables from julia and idl
 
 Currently the package provides the bare minimum to have some basic interaction between IDL and julia.
 
-For the time being, most shortcomings of the current API can be overcome by using the `execute` functionality, by grafting a valid IDL string to be `eval`'d by the IDL runtime.
+For the time being, most shortcomings of the current API can be overcome by using the `idlrun` functionality, by grafting a valid IDL string to be `eval`'d by the IDL runtime.
 
 # Quickstart
 
