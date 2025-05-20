@@ -56,41 +56,41 @@ jltype(t::IDL_TYP) = begin
 	Nothing
 end
 
-idltype(::Type{Nothing}) = T_UNDEF
-idltype(::Type{UInt8}) = T_BYTE
-idltype(::Type{Int16}) = T_INT
-idltype(::Type{Int32}) = T_LONG
-idltype(::Type{Float32}) = T_FLOAT
-idltype(::Type{Float64}) = T_DOUBLE
+idltype(::Type{Nothing}) 	= T_UNDEF
+idltype(::Type{UInt8}) 		= T_BYTE
+idltype(::Type{Int16}) 		= T_INT
+idltype(::Type{Int32}) 		= T_LONG
+idltype(::Type{Float32}) 	= T_FLOAT
+idltype(::Type{Float64}) 	= T_DOUBLE
 idltype(::Type{ComplexF32}) = T_COMPLEX
-idltype(::Type{String}) = T_STRING
+idltype(::Type{String}) 	= T_STRING
 # TODO: STRUCT
 idltype(::Type{ComplexF64}) = T_DCOMPLEX
 # TODO: PTR
 # TODO: OBJREF
-idltype(::Type{UInt16}) = T_UINT
-idltype(::Type{UInt32}) = T_ULONG
-idltype(::Type{Int64}) = T_LONG64
-idltype(::Type{UInt64}) = T_ULONG64
+idltype(::Type{UInt16}) 	= T_UINT
+idltype(::Type{UInt32}) 	= T_ULONG
+idltype(::Type{Int64}) 		= T_LONG64
+idltype(::Type{UInt64}) 	= T_ULONG64
 
-_alltypes_sym(t::UInt8) = _alltypes_sym(IDL_TYP(t))
+_alltypes_sym(t::UInt8)   = _alltypes_sym(IDL_TYP(t))
 _alltypes_sym(t::IDL_TYP) = begin
-	t == T_UNDEF ? :NULL :
-	t == T_BYTE ? :c :
-	t == T_INT ? :i :
-	t == T_LONG ? :l :
-	t == T_FLOAT ? :f :
-	t == T_DOUBLE ? :d :
-	t == T_COMPLEX ? :cmp :
-	t == T_STRING ? :str :
-	t == T_STRUCT ? :s :
+	t == T_UNDEF 	? :NULL :
+	t == T_BYTE 	? :c 	:
+	t == T_INT 		? :i 	:
+	t == T_LONG 	? :l 	:
+	t == T_FLOAT 	? :f 	:
+	t == T_DOUBLE 	? :d 	:
+	t == T_COMPLEX 	? :cmp 	:
+	t == T_STRING 	? :str 	:
+	t == T_STRUCT 	? :s 	:
 	t == T_DCOMPLEX ? :dcmp :
-	t == T_PTR ? :hvid :
-	t == T_OBJREF ? :hvid :
-	t == T_UINT ? :ui :
-	t == T_ULONG ? :ul :
-	t == T_LONG64 ? :l64 :
-	t == T_ULONG64 ? :ul64 :
+	t == T_PTR 		? :hvid :
+	t == T_OBJREF 	? :hvid :
+	t == T_UINT 	? :ui 	:
+	t == T_ULONG 	? :ul 	:
+	t == T_LONG64 	? :l64 	:
+	t == T_ULONG64 	? :ul64 :
 	:NULL
 end
 

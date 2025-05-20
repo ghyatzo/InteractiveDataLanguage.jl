@@ -1,84 +1,113 @@
-_ndims(_a::Ptr{IDL_ARRAY}) = unsafe_load(_a.n_dim) % Int
-_size(_a::Ptr{IDL_ARRAY}) = unsafe_load(_a.dim)
+#========================================#
+#
+#	Accessors to C struct fields
+#
+#========================================#
+
+arr_ndims(a__::Ptr{IDL_ARRAY}) 				= unsafe_load(a__.n_dim) % Int
+arr_size(a__::Ptr{IDL_ARRAY}) 				= unsafe_load(a__.dim)
+
 # we should return 1 for the dimensions without values, but IDL
 # already enforces this.
-_size(_a::Ptr{IDL_ARRAY}, d::Integer) = d <= 8 ? unsafe_load(Ptr{Int}(_a.dim), d) : 0
-_elsize(_a::Ptr{IDL_ARRAY}) = unsafe_load(_a.elt_len)
-_length(_a::Ptr{IDL_ARRAY}) = unsafe_load(_a.n_elts)
-_data(_a::Ptr{IDL_ARRAY}) = unsafe_load(_a.data)
-_set_free_cb(_arr::Ptr{IDL_ARRAY}, cb::Ptr{Cvoid}) = unsafe_store!(_arr.free_cb, cb)
+arr_size(a__::Ptr{IDL_ARRAY}, d::Integer) 	=
+	d <= IDL_MAX_ARRAY_DIM ? unsafe_load(Ptr{Int}(a__.dim), d) : 0
+arr_elsize(a__::Ptr{IDL_ARRAY}) 			= unsafe_load(a__.elt_len)
+arr_length(a__::Ptr{IDL_ARRAY}) 			= unsafe_load(a__.n_elts)
+arr_data__(a__::Ptr{IDL_ARRAY}) 			= unsafe_load(a__.data)
+
+_set_free_cb(arr__::Ptr{IDL_ARRAY}, cb::Ptr{Cvoid}) = unsafe_store!(arr__.free_cb, cb)
 
 
 checkdims(::AbstractArray{T, N}) where {T,N} =
 	N > IDL_MAX_ARRAY_DIM && throw(ArgumentError("IDL Arrays can have at most $IDL_MAX_ARRAY_DIM dimensions."))
 
+#========================================#
+#
+#	Generic IDL Array View Interface
+#
+#========================================#
+
 abstract type AbstractArrayView{T, N} <: AbstractArray{T, N} end
-function _array end
-function _ptr end
+function array__ end
+function data__ end
 
-Base.IndexStyle(::AbstractArrayView) = IndexLinear()
-
-Base.eltype(::Type{AbstractArrayView{T, N}}) where {T, N} = T
-
-Base.size(x::AbstractArrayView{T, N}) where {T,N} = @inbounds _size(_array(x))[1:N]
-Base.size(x::AbstractArrayView, d) = _size(_array(x), d)
-Base.length(x::AbstractArrayView) = _length(_array(x))
-Base.firstindex(x::AbstractArrayView) = 1
-Base.lastindex(x::AbstractArrayView) = length(x)
+Base.IndexStyle(::AbstractArrayView) 				= IndexLinear()
+Base.eltype(::Type{AbstractArrayView{T}}) where {T} = T
+Base.size(x::AbstractArrayView{T, N}) where {T,N} 	= @inbounds arr_size(array__(x))[1:N]
+Base.size(x::AbstractArrayView, d) 					= arr_size(array__(x), d)
+Base.length(x::AbstractArrayView) 					= arr_length(array__(x))
+Base.firstindex(x::AbstractArrayView) 				= 1
+Base.lastindex(x::AbstractArrayView) 				= length(x)
 
 function Base.iterate(x::AbstractArrayView, state=(eachindex(x),))
-    y = Base.iterate(state...)
-    y === nothing && return nothing
-    x[y[1]], (state[1], Base.tail(y)...)
+	y = Base.iterate(state...)
+	y === nothing && return nothing
+	x[y[1]], (state[1], Base.tail(y)...)
 end
-Base.IteratorSize(::AbstractArrayView) = Base.HasLength()
-Base.IteratorEltype(::AbstractArrayView) = Base.HasEltype()
+Base.IteratorSize(::AbstractArrayView) 		= Base.HasLength()
+Base.IteratorEltype(::AbstractArrayView) 	= Base.HasEltype()
 
-Base.getindex(x::AbstractArrayView{T, N}, i::Integer) where {T, N} = begin
+function Base.getindex(x::AbstractArrayView{T, N}, i::Integer) where {T, N}
 	@boundscheck checkbounds(x, i)
-	convert(T, unsafe_load(_ptr(x), i))
-end
-
-Base.setindex!(x::AbstractArrayView{T, N}, v::T, i) where {T <: JL_SCALAR, N} = begin
-	@boundscheck checkbounds(x, i)
-	unsafe_store!(_ptr(x), v, i)
+	convert(T, unsafe_load(data__(x), i))
 end
 
-Base.setindex!(x::AbstractArrayView{<:AbstractString}, v::AbstractString, i) = begin
+function Base.setindex!(x::AbstractArrayView{T, N}, v::T, i) where {T <: JL_SCALAR, N}
 	@boundscheck checkbounds(x, i)
-	IDL_StrStore(_ptr(x) + (sizeof(IDL_STRING) * (Int(i) - 1)), v)
+	unsafe_store!(data__(x), v, i)
 end
+
+function Base.setindex!(x::AbstractArrayView{<:AbstractString}, v::AbstractString, i)
+	@boundscheck checkbounds(x, i)
+	IDL_StrStore(data__(x) + (sizeof(IDL_STRING) * (Int(i) - 1)), v)
+end
+
+
+#========================================#
+#
+#	Unsafe View with no checks
+#
+#========================================#
+
 
 struct UnsafeView{T, N, V} <: AbstractArrayView{T, N}
 	v::V
 	offset::UInt
 
 	function UnsafeView(v::V, offset=0) where V <: AbstractIDLVariable
-		N = _ndims(_array(v))
+		N = arr_ndims(array__(v))
 		T = eltype(v)
 		return new{T, N, V}(v, offset)
 	end
 end
 
-_array(x::UnsafeView) = _var_array(_varptr(x.v))
-_ptr(x::UnsafeView{T}) where {T} = Ptr{T}(_data(_array(x)) + x.offset)
-_ptr(x::UnsafeView{<:AbstractString}) = Ptr{IDL_STRING}(_data(_array(x)) + x.offset)
+array__(x::UnsafeView) 					= vararray__(varptr__(x.v))
+data__(x::UnsafeView{T}) where {T} 		= Ptr{T}(arr_data__(array__(x)) + x.offset)
+data__(x::UnsafeView{<:AbstractString}) = Ptr{IDL_STRING}(arr_data__(array__(x)) + x.offset)
+
+idlvar(x::UnsafeView) = getfield(x, :v)
+
+#========================================#
+#
+#	Normal View with safety checks
+#
+#========================================#
 
 
 mutable struct ArrayView{T, N, V} <: AbstractArrayView{T, N}
-	v::V
 	safety::Bool
-	_arr::Ptr{IDL_ARRAY}
+	const v::V
+	const arr::Ptr{IDL_ARRAY}
 
 	function ArrayView(v::V) where V <: AbstractIDLVariable
-		N = _ndims(_array(v))
+		arr__ = array__(v)
+		N = arr_ndims(arr__)
 		T = eltype(v)
-		_arr = _array(v)
 
-		this = new{T, N, V}(v, true, _arr)
+		this = new{T, N, V}(true, v, arr__)
 		weakthis = WeakRef(this)
 
-		cb = (_p::Ptr{Cuchar}) -> begin
+		cb = (p__::Ptr{Cuchar}) -> begin
 			# This callback assumes that when it is called, a valid reference to
 			# `this` still exists and has not been gc'ed.
 			# we need to hold a weak ref so that storing the cb does not prevent the view from being gc'ed.
@@ -86,16 +115,16 @@ mutable struct ArrayView{T, N, V} <: AbstractArrayView{T, N}
 			if this !== nothing
 				setfield!(this, :safety, false)
 			end
-			# if called, it means that the data is not valid anymore, delete in any case.
-			delete!(CB_HOLDING, _p)
+			# if called, it means that the data is not valid anymore, delete this callback in any case.
+			delete!(CB_HOLDING, p__)
 
 			return nothing
 		end
 
 		# each callback is associated with the array data pointer
 		# that, when freed, would call it
-		preserve_cb(_data(_arr), cb)
-		_set_free_cb(_array(v), __PASSTHROUGH_CB[])
+		preserve_cb(arr_data__(arr__), cb)
+		_set_free_cb(array__(v), __PASSTHROUGH_CB[])
 
 		finalizer(this) do this
 			# We must check that the data has not been freed, since this finalizer
@@ -106,8 +135,8 @@ mutable struct ArrayView{T, N, V} <: AbstractArrayView{T, N}
 			if getfield(this, :safety)
 				# otherwise the IDL array is still alive.
 				# we can unset the callback and delete its ref.
-				_set_free_cb(this._arr, C_NULL)
-				delete!(CB_HOLDING, _data(this._arr))
+				_set_free_cb(getfield(this, :arr), C_NULL)
+				delete!(CB_HOLDING, arr_data__(getfield(this, :arr)))
 
 				setfield!(this, :safety, false)
 			end
@@ -122,28 +151,19 @@ function safetycheck(x::ArrayView)
 		The array the view was pointing to has been freed.\n
 		To continue using the binding convert it back to a generic variable with `idlvar`.""",
 	:ArrayView))
-
 end
 
-_array(x::ArrayView) = (safetycheck(x); return _array(x.v))
-_ptr(x::ArrayView{T}) where {T} = Ptr{T}(_data(_array(x)))
-_ptr(x::ArrayView{<: AbstractString}) = Ptr{IDL_STRING}(_data(_array(x)))
+array__(x::ArrayView) 					= (safetycheck(x); return array__(x.v))
+data__(x::ArrayView{T}) where {T} 		= Ptr{T}(arr_data__(array__(x)))
+data__(x::ArrayView{<: AbstractString}) = Ptr{IDL_STRING}(arr_data__(array__(x)))
 
-idlvar(x::ArrayView) = x.v
-idlvar(name::Symbol, x::Array{T, N}) where {T<:JL_SCALAR, N} = idlarray(name, x)
+idlvar(x::ArrayView) = getfield(x, :v)
 
-# From IDL memory to Julia
-unsafe_jlview(v::AbstractIDLVariable) = UnsafeView(v)
-unsafe_jlview(name::Symbol) = unsafe_jlview(idlvar(name))
-
-jlview(v::AbstractIDLVariable) = ArrayView(v)
-jlview(name::Symbol) = jlview(idlvar(name))
-
-jlarray(x::AbstractArrayView{T, N}) where {T, N} = copyto!(similar(x), x)
-jlarray(v::AbstractIDLVariable) = jlarray(unsafe_jlview(v))
-jlarray(name::Symbol) = jlarray(idlvar(name))
-
-# From Julia Memory to IDL
+#============================================================#
+#
+#	Initialize IDL memory from Julia
+#
+#============================================================#
 
 # Initialize a container for specifying the dimensions passed through the ccall.
 # IDL will copy its contents, so we can reuse it.
@@ -159,31 +179,31 @@ function idldims(arr::AbstractArray{T, N}) where {T, N}
 end
 
 function idlsimilar(arr::AbstractArray{T, N}) where {T <: JL_SCALAR, N}
-	_tmpvarref = Ref{Ptr{IDL_VARIABLE}}()
+	tmpvarref__ = Ref{Ptr{IDL_VARIABLE}}()
 
-	IDL_MakeTempArray(idltype(T), N, idldims(arr), IDL_ARR_INI_NOP, _tmpvarref)
+	IDL_MakeTempArray(idltype(T), N, idldims(arr), IDL_ARR_INI_NOP, tmpvarref__)
 
-	return TemporaryVariable(_tmpvarref[])
+	return TemporaryVariable(tmpvarref__[])
 end
 
 function idlsimilar(arr::AbstractArray{<:AbstractString, N}) where {N}
-	_tmpvarref = Ref{Ptr{IDL_VARIABLE}}()
+	tmpvarref__ = Ref{Ptr{IDL_VARIABLE}}()
 
-	IDL_MakeTempArray(T_STRING, N, idldims(arr), IDL_ARR_INI_NOP, _tmpvarref)
+	IDL_MakeTempArray(T_STRING, N, idldims(arr), IDL_ARR_INI_NOP, tmpvarref__)
 
-	return TemporaryVariable(_tmpvarref[])
+	return TemporaryVariable(tmpvarref__[])
 end
 
 function maketempwrap(arr::Array{T,N}) where {T<:JL_SCALAR, N}
-	checkdims(arr)
+	@boundscheck checkdims(arr)
 
-	_rooted_data = preserve_ref(pointer(arr), arr.ref)
+	rooted_data__ = preserve_ref__(pointer(arr), arr.ref)
 
-	_var = IDL_ImportArray(
-		N, idldims(arr), idltype(T), _rooted_data, __JL_DROPREF[], C_NULL
+	var__ = IDL_ImportArray(
+		N, idldims(arr), idltype(T), rooted_data__, __JL_DROPREF[], C_NULL
 	)
 
-	TemporaryVariable(_var)
+	TemporaryVariable(var__)
 end
 
 function maketemp(arr::Array{T, N}) where {T<:JL_SCALAR, N}
@@ -201,15 +221,15 @@ function maketemp(arr::Array{<:AbstractString, N}) where {N}
 end
 
 function idlwrap(name::Symbol, arr::Array{T, N}) where {T<:JL_SCALAR, N}
-	checkdims(arr)
+	@boundscheck checkdims(arr)
 
-	_rooted_data = preserve_ref(pointer(arr), arr.ref)
+	rooted_data__ = preserve_ref__(pointer(arr), arr.ref)
 
-	_var = IDL_ImportNamedArray(
-		name, N, idldims(arr), idltype(T), _rooted_data, __JL_DROPREF[], C_NULL
+	var__ = IDL_ImportNamedArray(
+		name, N, idldims(arr), idltype(T), rooted_data__, __JL_DROPREF[], C_NULL
 	)
 
-	return Variable(_var)
+	return Variable(var__)
 end
 
 idlwrap(v::Variable, arr::Array{T, N}) where {T<:JL_SCALAR, N} = idlwrap(Symbol(name(v)), arr)
@@ -225,62 +245,25 @@ end
 
 idlarray(name::Symbol, arr::Array{T, N}) where {T<:JL_SCALAR, N} = idlarray(idlvar(name), arr)
 
+#============================================================#
+#
+#	From IDL memory to Julia
+#
+#============================================================#
 
 
-# idldims(d::Vararg{Integer}) = begin
-# 	nd = length(d)
-# 	nd > 8 && throw(ArgumentError("IDL Arrays support at most 8 dimensions."))
+idlvar(name::Symbol, x::Array{T, N}) where {T<:JL_SCALAR, N} = idlarray(name, x)
 
-# 	dims = ones(8)
-# 	dims[1:nd] .= d
-# 	return dims
-# end
+# From IDL memory to Julia
+unsafe_jlview(v::AbstractIDLVariable) = UnsafeView(v)
+unsafe_jlview(name::Symbol) = unsafe_jlview(idlvar(name))
 
-# idlzeros(T::Type, D::Vararg{Integer}) = begin
-# 	_tmp = IDL_Gettmp()
-# 	IDL_MakeTempArray(idltype(T), length(D), idldims(D...), IDL_ARR_INI_ZERO, _tmp)
-# 	_v = IDL_GetVarAddr1(idlgensym(), IDL_TRUE)
-# 	IDL_VarCopy(_tmp, _v)
-# 	ArrayView(Variable(_v))
-# end
-# idlzeros(D::Vararg{Integer}) = idlzeros(Float64, D...)
+jlview(v::AbstractIDLVariable) = ArrayView(v)
+jlview(name::Symbol) = jlview(idlvar(name))
 
-
-
-
-# mutable struct ArrayView{T, N} <: AbstractArray{T, N}
-# 	_arr::Ptr{IDL_ARRAY}
-# 	dataoverride::Ptr{Cuchar}
-# 	_customcb::Base.CFunction
-
-# 	function ArrayView(v::Variable, inheriteddata = C_NULL)
-# 		isarray(v) || throw(ArgumentError("The variable must point to an IDL Array."))
-
-# 		_arr = unsafe_load(v._v.value.arr)
-# 		N = unsafe_load(_arr.n_dim) % Int
-# 		T = eltype(v)
-
-# 		x = new{T, N}(_arr, inheriteddata)
-
-# 		# The default callback invalidates the ArrayView
-# 		x._customcb = @cfunction($((_p::Ptr{Cuchar}) -> begin
-# 			setfield!(x, :_arr, Ptr{IDL_ARRAY}(C_NULL))
-# 			nothing
-# 		end), Nothing, (Ptr{Cuchar},))
-
-# 		unsafe_store!(_arr.free_cb, Base.unsafe_convert(Ptr{Cvoid}, x._customcb))
-
-# 		return x
-# 	end
-# end
-
-
-
-# _dataptr(x::ArrayView{T, N}) where {T, N} = begin
-# 	x.dataoverride == C_NULL ? Ptr{T}(unsafe_load(x._arr.data)) : Ptr{T}(x.dataoverride)
-# end
-
-
+jlarray(x::AbstractArrayView{T, N}) where {T, N} = copyto!(similar(x), x)
+jlarray(v::AbstractIDLVariable) = jlarray(unsafe_jlview(v))
+jlarray(name::Symbol) = jlarray(idlvar(name))
 
 
 
