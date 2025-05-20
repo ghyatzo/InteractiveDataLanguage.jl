@@ -1,19 +1,19 @@
 # IDL interface for the Julia language
 
-The `IDL.jl` package is a wrapper for the IDL C API for calling IDL from the Julia language. Any IDL code will need to be provided by the users.
+The `InteractiveDataLanguage.jl` package is a wrapper for the IDL C API for calling IDL from the Julia language. Any IDL code will need to be provided by the users.
 Users are also expected to have a valid licensed Installation of the IDL library in their system, which must be obtained separately.
 This package also assumes your license is correctly set up and provides no functionality nor instructions on how to set up an IDL installation, refer to the official IDL documentation instead.
 
 > [!CAUTION]
 > This package is still in the experimental phase, expect frequent changes.
 
-This package started with an attempt to revive the code from [this package](https://github.com/henry2004y/IDL.jl) which was a fork of [this other package](https://github.com/BobPortmann/IDLCall.jl). But it turned into a complete rewrite.
+This package started with an attempt to revive the code from [this package](https://github.com/henry2004y/IDL.jl) which was a fork of [this other package](https://github.com/BobPortmann/InteractiveDataLanguage.jl). But it turned into a complete rewrite.
 
 ## Installation
 
 Within Julia, use the package manager:
 ```julia
-] add IDL
+] add InteractiveDataLanguage
 ```
 
 > [!NOTE]
@@ -55,35 +55,34 @@ For the time being, most shortcomings of the current API can be overcome by usin
 # Quickstart
 
 ```julia
-using IDL
+using InteractiveDataLanguage
 ```
 Once the package is loaded, it will automatically acquire a license. The license is bound to the current julia process. To drop the licence close the julia process.
 
 Create a variable in IDL and get an handle to it from Julia:
 ```julia
-IDL.execute("x = 10LL") # LL creates an Int64
+idlrun("x = 10LL") # LL creates an Int64
 
-x = IDL.var(:x)
+x = idlvar(:x)
 ```
 Instead you can initialize a new (or exising) variable with a value directly from Julia
 ```julia
-y = IDL.var(:y, 20)
+y = idlvar(:y, 20)
 ```
 Look at the value held by the IDL variable
 ```julia
 @assert x[] == y[] - 10
-@assert 2 * IDL.scalar(x) == IDL.scalar(y)
+@assert 2 * jlscalar(x) == jlscalar(y)
 ```
 
 Specify the type of the variable from the julia side:
 ```julia
-@assert IDL.scalar(y) isa Int
-@assert IDL.scalar(Float32, y) === Float32(20)
-@assert convert(UInt32, x) === IDL.scalar(UInt32, x)
+@assert jlscalar(y) isa Int
+@assert jlscalar(Float32, y) == Float32(20)
 
 # Directly extract just the value of the desired type
-xfloat::Float64 = IDL.var(:x)
-yfloat = IDL.scalar(Float32, :y)
+xfloat::Float64 = idlvar(:x)
+yfloat = jlscalar(Float32, :y)
 @assert xfloat == 10.0
 @assert yfloat == 20.0f0
 

@@ -1,4 +1,4 @@
-module IDL
+module InteractiveDataLanguage
 
 # References (in no particular order)
 # [1] https://www.nv5geospatialsoftware.com/docs/PassingStructures.html
@@ -27,7 +27,7 @@ export idlrun,
 
 
 if Sys.isunix()
-    idl_exec = chomp(read(`which idl`,String))
+    idl_exec = readchomp(`which idl`)
     if islink(idl_exec)
         idl_dir = dirname(readlink(idl_exec))
     else
@@ -38,7 +38,7 @@ if Sys.isunix()
     const idlrpc = joinpath(idl_dir,"idlrpc")
     const libidl = joinpath(idl_lib_dir,"libidl.dylib")
 else # Windows
-    const idl_lib_dir = dirname(chomp(read(`where idl`, String))) # idl must be in path.
+    const idl_lib_dir = dirname(readchomp(`where idl`)) # idl must be in path.
     const libidl = joinpath(idl_lib_dir, "idl")
 end
 
@@ -63,8 +63,8 @@ const CB_HOLDING = Dict{Ptr, Base.Callable}()
 # so we buffer them in this global for better printing.
 const ERROR_MSG = Ref{String}("")
 
-@inline preserve_ref(_x::Ptr, x::Ref) = (JL_ARR_ROOT[_x] = x; return _x)
-@inline preserve_cb(_x::Ptr, cb::Base.Callable) = CB_HOLDING[_x] = cb
+@inline preserve_ref__(x__::Ptr, x::Ref) = (JL_ARR_ROOT[x__] = x; return x__)
+@inline preserve_cb(x__::Ptr, cb::Base.Callable) = CB_HOLDING[x__] = cb
 
 const __JL_DROPREF = Ref{Ptr{Cvoid}}()
 
@@ -81,7 +81,7 @@ function __jl_drop_array_ref(_p::Ptr{Cuchar})::Cvoid
 end
 
 function __passthrough_callback(_p::Ptr{Cuchar})::Cvoid
-    cb::Base.Callable = CB_HOLDING[_p]
+    cb = CB_HOLDING[_p]::Base.Callable
     cb(_p)
 
     return nothing
@@ -109,20 +109,19 @@ end
 
 
 include("type_conversion.jl")
-
 include("variables.jl")
-
 include("arrays.jl")
 
-function Base.getindex(v::Variable)
-    isarray(v) && return jlview(v)
-    return jlscalar(v)
+function Base.getindex(v::AbstractIDLVariable)
+    return isarray(v) ? jlview(v) : jlscalar(v)
 end
-function Base.getindex(tv::TemporaryVariable)
-    isarray(tv) && return jlview(tv)
-    return jlscalar(tv)
+
+function Base.setindex!(v::AbstractIDLVariable, x::T) where
+{
+    T<:Union{JL_SCALAR, AbstractString}
+}
+    set!(v, x)
 end
-Base.setindex!(v::AbstractIDLVariable, x::T) where {T<:Union{JL_SCALAR, AbstractString}} = set!(v, x)
 
 # include("structs.jl")
 # include("common.jl")

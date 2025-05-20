@@ -1,4 +1,5 @@
-using IDL
+import InteractiveDataLanguage as IDL
+using .IDL
 using Test
 using JET
 using ExplicitImports
