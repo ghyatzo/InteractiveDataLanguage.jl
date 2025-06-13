@@ -1,6 +1,6 @@
 # IDL interface for the Julia language
 
-The `InteractiveDataLanguage.jl` package is a wrapper for the IDL C API for calling IDL from the Julia language. Any IDL code will need to be provided by the users.
+The `InteractiveDataLanguage.jl` package is a wrapper for the `CallableIDL` API for calling IDL from other languages. Any IDL code will need to be provided by the users.
 Users are also expected to have a valid licensed Installation of the IDL library in their system, which must be obtained separately.
 This package also assumes your license is correctly set up and provides no functionality nor instructions on how to set up an IDL installation, refer to the official IDL documentation instead.
 
@@ -17,7 +17,7 @@ Within Julia, use the package manager:
 ```
 
 > [!NOTE]
-> `IDL.jl` should find and load the IDL library automatically. It has not been tested on Mac and/or Linux so please file an issue if you encounter errors. For the automatic discovery IDL should be in the PATH.
+> `InteractiveDataLanguage.jl` should find and load the IDL library automatically. It has not been tested on Mac and/or Linux so please file an issue if you encounter errors. For the automatic discovery IDL should be in the PATH.
 
 IDL can be called externally using either the `RPC` or `Callable` interface.
 This library opted to only support the `Callable` IDL interface due to better ergonomics
@@ -59,6 +59,13 @@ using InteractiveDataLanguage
 ```
 Once the package is loaded, it will automatically acquire a license. The license is bound to the current julia process. To drop the licence close the julia process.
 
+It might be beneficial to import the package to provide an alternative binding to the module to shorten it:
+```jl
+import InteractiveDataLanguage as IDL
+using .IDL
+```
+
+## Scalar Variables
 Create a variable in IDL and get an handle to it from Julia:
 ```julia
 idlrun("x = 10LL") # LL creates an Int64
@@ -104,25 +111,52 @@ y[] = "IDL!"
 >[!NOTE]
 > If a variable is manipulated both from Julia and IDL, extra care is advised in keeping track of the actual type of the variable.
 
-<!--
-IDL has three main types of datatypes:
-### Scalars
-These include mostly primitive types such as `Int`s/`UInt`s, `Double`s, etc..
-Notably, IDL's `String`s are considered scalars even though they aren't really.
+## Arrays
+Arrays in IDL can be multidimensional, but they have an hard limit of maximum 8 dimensions.
 
-### Arrays
- - Arrays in IDL are akin to a mutable `NTuple` or `SizedArray` from `StaticArrays.jl`.
- - IDL supports multiarrays, but there is a hardcoded maximum of 8 dimensions.
- - IDL Arrays are column major
 
- - It is possible to have arrays of structures even though structures are not scalars, but it is peculiar in the sense that Array of Structures in IDL behave very much like Structures of Arrays, and all structures must have the same signature (both tag structure and type).
+> [!CAUTION]
+> Although IDL is technically column major order, IDL arrays have the first two dimensions swapped. Therefore, be extra careful when passing data between the two languages.
 
- - Arrays of scalars are not copied from idl to julia.
- - Arrays of structures are not copied, only the tag information, but not the data.
- >[!WARN]
- > You must take care to keep assigned the variable that holds the data you're referencing from julia assigned, so that IDL does not reuse the memory.
+```julia
+idlrun("arr = [1ll,2ll,3ll,4ll]") # Int64 array
+arr = jlview(:arr)
 
- - Arrays of up to 8 dimensions in julia memory can be passed to IDL and will automatically be kept safe from the GC. The data can be manipulated from either side. -->
+@assert sum(arr[]) = 10
+
+# views allow you to change idl memory from julia
+arr[][2] = 5
+idlrun("print, arr[2]")
+# 5
+```
+a view to IDL data is only valid up until the underlaying array stays alive.
+if for any reason the IDL data is freed, the view will become useless.
+you can recover the binding on the julia side by calling `arr = idlvar(arr)`
+which will retrieve the variable with any new value associated to it.
+
+
+If instead you want to just make a copy of the data, use the `jlarray` function which will allocate new memory managed by julia and therefore independent of anything that might happen to the original data.
+```jl
+arrcopy = jlarray(:arr)
+@assert arrcopy .== arr[]
+```
+
+Alternatively you can send and view data managed by julia from IDL by using the `idlvar` and `idlwrap` functions, respectively.
+```jl
+jlarr = [1,2,3,4]
+
+idlarrcopy = idlvar(:jlarrcopy, jlarr)
+idlarr = idlwrap(:jlarr, jlarr)
+# both return an ArrayView object that can be used to interact with the newly created variables in IDL
+
+@assert idlarrcopy[] .== idlarr[] .== jlarr
+idlarrcopy[][1] = 5
+@assert jlarr[1] != 5
+idlrun("jlarr[2] = 5")
+@assert jlarr[2] == 5
+```
+
+If performance is of the essence, it is possible to use an `unsafe_jlview` that performs no checks on the liveliness of the IDL data. It goes without saying that you'll be responsible to make sure the data will be always available. Otherwise expect violent crashes and segfaults that will bring down the whole julia session.
 
 <!-- ### Structures:
 Structures in IDL are not like structures in Julia, instead they are more akin to
@@ -137,15 +171,15 @@ with all its tags, that wraps IDL memory. The IDL structures in julia behaves as
 > Currently it is not (yet) possible to pass structured data from julia to IDL directly.
 > If absolutely needed one can construct a string that defines the structure in IDL syntax and generate it directly in idl via a `IDL.execute` call. -->
 
-### `IDL.execute`
-This package provides the `execute` function that sends to idl a string to be evaluated, as if
-you're typing it in the console. Accepts multiline strings, with comments and linebreaks.
+### Running arbitrary IDL strings
+This package provides the `idlrun` function that sends to idl a string to be evaluated, as if you're typing it in the console. Accepts multiline strings, with comments and linebreaks.
 
-Some convenient wrappers of `IDL.execute` are provided:
+Some convenient wrappers of `idlrun` are provided:
 ```
-IDL.help
-IDL.idlhelp
-IDL.reset
-IDL.full_reset
-IDL.dotrun
+idlhelp
+idlprint
+InteractiveDataLanguage.reset
+InteractiveDataLanguage.full_reset
+InteractiveDataLanguage.dotrun
 ```
+
