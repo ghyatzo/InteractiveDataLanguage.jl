@@ -200,6 +200,18 @@ function idlvar(name::Symbol)
 	return Variable(var__)
 end
 
+function idlvar(name::Symbol, ::UndefInitializer)
+	var__ = IDL_GetVarAddr(String(name))
+
+	if var__ == C_NULL
+		var = Variable(IDL_GetVarAddr1(String(name), IDL_TRUE))
+		return var
+	end
+
+	IDL_StoreScalarZero(var__, C_NULL)
+	return Variable(var__)
+end
+
 function idlvar(name::Symbol, x::T) where {T <: JL_SCALAR}
 	var__ = IDL_GetVarAddr(String(name))
 
