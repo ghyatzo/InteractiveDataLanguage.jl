@@ -1,14 +1,41 @@
 [general]
 library_name = "libidl"
 
-output_file_path = "../lib/lib_idl-v2.jl"
-prologue_file_path = ""
-epilogue_file_path = ""
-
-use_julia_native_enum_type = true
-print_using_CEnum = false
+output_file_path = "../lib/lib_idl-v1.12.jl"
+prologue_file_path = "prologue.jl"
+epilogue_file_path = "epilogue.jl"
 
 export_symbol_prefixes = []
 
+smart_de_anonymize = true
+
+use_ccall_macro = true
+
+output_ignorelist = [
+	"IDL_VERSION_STRING",
+	"IDL_VERSION_STRING_NOSUBMINOR",
+	"IDL_EZ_TYP_NUMERIC",
+	"IDL_KW_RESULT_FIRST_FIELD",
+	"IDL_STDCALL",
+	"IDL_RASTER_MSB_LEFT",
+	"IDL_RASTER_MSB_RIGHT",
+	"strcasecmp",
+	"strncasecmp",
+	"wstrcasecmp",
+	"wstrncasecmp",
+	"snwprintf",
+	"vsnprintf",
+	"strlcpy",
+	"strlcat",
+	"strlcatW",
+	"strbcopy",
+	"strbcopyW",
+	"strcasestr",
+]
+
 [codegen]
-add_record_constructors = true
+add_record_constructors = [
+	"IDL_ALLTYPES",
+	"IDL_VARIABLE",
+	"IDL_INIT_DATA"
+]

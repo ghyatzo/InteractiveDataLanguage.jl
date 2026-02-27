@@ -37,22 +37,22 @@ const JL_SCALAR = Union{
 end
 
 jltype(t::IDL_TYP) = begin
-	t == T_UNDEF ? Nothing :
-	t == T_BYTE ? UInt8 :
-	t == T_INT ? Int16 :
-	t == T_LONG ? Int32 :
-	t == T_FLOAT ? Float32 :
-	t == T_DOUBLE ? Float64 :
-	t == T_COMPLEX ? ComplexF32 :
-	t == T_STRING ? String :
-	t == T_STRUCT ? DataType :
-	t == T_DCOMPLEX ? ComplexF64 :
-	t == T_PTR ? Ptr :
-	t == T_OBJREF ? Ptr :
-	t == T_UINT ? UInt16 :
-	t == T_ULONG ? UInt32 :
-	t == T_LONG64 ? Int64 :
-	t == T_ULONG64 ? UInt64 :
+	t == T_UNDEF 	? Nothing 		:
+	t == T_BYTE 	? UInt8 		:
+	t == T_INT 		? Int16 		:
+	t == T_LONG 	? Int32 		:
+	t == T_FLOAT 	? Float32 		:
+	t == T_DOUBLE 	? Float64 		:
+	t == T_COMPLEX 	? ComplexF32 	:
+	t == T_STRING 	? String 		:
+	t == T_STRUCT 	? DataType 		: # TODO
+	t == T_DCOMPLEX ? ComplexF64 	:
+	t == T_PTR 		? Ptr 			: # TODO
+	t == T_OBJREF 	? Ptr 			: # TODO
+	t == T_UINT 	? UInt16 		:
+	t == T_ULONG 	? UInt32 		:
+	t == T_LONG64 	? Int64 		:
+	t == T_ULONG64 	? UInt64 		:
 	Nothing
 end
 
@@ -103,7 +103,6 @@ Base.convert(::Type{IDL_STRING}, s::String) = begin
 	IDL_StrStore(strref, s)
 	strref[]
 end
-
 
 Base.convert(::Type{IDL_COMPLEX}, c::ComplexF32) = IDL_COMPLEX(c.re, c.im)
 Base.convert(::Type{IDL_DCOMPLEX}, c::ComplexF64) = IDL_DCOMPLEX(c.re, c.im)

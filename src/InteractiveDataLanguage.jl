@@ -20,12 +20,22 @@ module InteractiveDataLanguage
 using CEnum: CEnum, @cenum
 using StaticArrays: StaticArrays, SizedVector
 
-export idlrun,
-    idlvar, jlscalar, maketemp,
-    jlview, unsafe_jlview, jlarray,
-    idlsimilar, maketempwrap, idlwrap, idlarray
+export IDL,
+    idlrun,
 
+    idlvar,
+    jlscalar,
+    maketemp,
 
+    jlview,
+    unsafe_jlview,
+    jlarray,
+    idlarray,
+    idlsimilar,
+    maketempwrap,
+    idlwrap
+
+# idl must be in path.
 if Sys.isunix()
     idl_exec = readchomp(`which idl`)
     if islink(idl_exec)
@@ -33,26 +43,18 @@ if Sys.isunix()
     else
         idl_dir = dirname(idl_exec)
     end
-    idl_lib_dir = joinpath(idl_dir,"bin.darwin.x86_64")
-    const libidl_rpc = joinpath(idl_lib_dir,"libidl_rpc.dylib")
-    const idlrpc = joinpath(idl_dir,"idlrpc")
+    const idl_lib_dir = joinpath(idl_dir,"bin.darwin.x86_64")
     const libidl = joinpath(idl_lib_dir,"libidl.dylib")
 else # Windows
-    const idl_lib_dir = dirname(readchomp(`where idl`)) # idl must be in path.
+    const idl_lib_dir = dirname(readchomp(`where idl`))
     const libidl = joinpath(idl_lib_dir, "idl")
 end
 
-include("../lib/lib_idl.jl")
-# === InitData Default Constructor
-IDL_INIT_DATA(init_options::Int64) = IDL_INIT_DATA(convert(IDL_INIT_DATA_OPTIONS_T, init_options))
-function IDL_INIT_DATA(init_options::IDL_INIT_DATA_OPTIONS_T)
-    ref = Ref{IDL_INIT_DATA}()
-    GC.@preserve ref begin
-        x = Base.unsafe_convert(Ptr{IDL_INIT_DATA}, ref)
-        x.options = init_options
-        ref[]
-    end
-end
+safeprintln(str::String) = ccall(:jl_safe_printf, Cvoid, (Cstring, ), str * "\n")
+
+macro comment(_...) end
+
+include("../lib/lib_idl-v1.12.jl")
 
 # === CALLBACKS and REFERENCE ROOTING
 const JL_ARR_ROOT = Dict{Ptr, Ref}()
@@ -63,18 +65,13 @@ const CB_HOLDING = Dict{Ptr, Base.Callable}()
 # so we buffer them in this global for better printing.
 const ERROR_MSG = Ref{String}("")
 
-@inline preserve_ref__(x__::Ptr, x::Ref) = (JL_ARR_ROOT[x__] = x; return x__)
+@inline preserve_ref__(x__::Ptr, x::Ref) = (JL_ARR_ROOT[convert(Ptr{UInt8}, x__)] = x; return convert(Ptr{UInt8}, x__))
 @inline preserve_cb(x__::Ptr, cb::Base.Callable) = CB_HOLDING[x__] = cb
 
-const __JL_DROPREF = Ref{Ptr{Cvoid}}()
-
-const __PASSTHROUGH_CB = Ref{Ptr{Cvoid}}()
-
-const __OUTPUT_CB = Ref{Ptr{Cvoid}}()
 
 
 function __jl_drop_array_ref(_p::Ptr{Cuchar})::Cvoid
-    @info "Dropping pointer: $_p"
+    #safeprintln("Dropping pointer: $_p")
     delete!(JL_ARR_ROOT, _p)
 
     return nothing
@@ -106,11 +103,37 @@ function __output_callback(flags, buf::Ptr{UInt8}, n)::Cvoid
     return nothing
 end
 
+# We need to get the pointer to the callbacks at runtime and not during compilation.
+# See: https://discourse.julialang.org/t/julia-crashes-when-using-a-cfunction-from-another-module/98576/2
+const __JL_DROPREF_CB = Base.OncePerProcess{Ptr{Cvoid}}() do
+    @cfunction(__jl_drop_array_ref, Nothing, (Ptr{Cuchar},))
+end
 
+const __PASSTHROUGH_CB = Base.OncePerProcess{Ptr{Cvoid}}() do
+    @cfunction(__passthrough_callback, Nothing, (Ptr{Cuchar},))
+end
+
+const __OUTPUT_CB = Base.OncePerProcess{Ptr{Cvoid}}() do
+    @cfunction(__output_callback, Cvoid, (Cint, Ptr{UInt8}, Cint))
+end
+
+
+struct IDLMain end
+const IDL = IDLMain()
 
 include("type_conversion.jl")
 include("variables.jl")
 include("arrays.jl")
+
+
+idlrun(string::AbstractString) = begin
+    # remove comments and coalesce line breaks
+    string = replace(replace(string, r";.*" => ""), r"\$\s*\n" => "")
+    iostring = IOBuffer(string)
+    for line in eachline(iostring)
+        IDL_ExecuteStr(line)
+    end
+end
 
 function Base.getindex(v::AbstractIDLVariable)
     return isarray(v) ? jlview(v) : jlscalar(v)
@@ -123,25 +146,19 @@ function Base.setindex!(v::AbstractIDLVariable, x::T) where
     set!(v, x)
 end
 
+
+Base.getproperty(::IDLMain, x::Symbol) = idlvar(x)
+Base.setproperty!(::IDLMain, x::Symbol, v) = idlvar(x, v)
+
+
 # include("structs.jl")
 # include("common.jl")
-idlrun(string::AbstractString) = begin
-    # remove comments and coalesce line breaks
-    string = replace(replace(string, r";.*" => ""), r"\$\s*\n" => "")
-    iostring = IOBuffer(string)
-    for line in eachline(iostring)
-        IDL_ExecuteStr(line)
-    end
-end
-
 # include("IDLREPL.jl")
 
-
-function __init__()
+const init = Base.OncePerProcess{Nothing}() do
     @info "Acquiring License..."
-    init_options = IDL_INIT_BACKGROUND # | IDL_INIT_QUIET
 
-    init_data = Ref(IDL_INIT_DATA(init_options))
+    init_data = Ref(IDL_INIT_DATA(IDL_INIT_BACKGROUND))
 
     err = IDL_Initialize(init_data)
 
@@ -151,18 +168,7 @@ function __init__()
         IDL_Cleanup(IDL_FALSE)
     end
 
-    # We need to get the pointer to the callbacks at runtime
-    # and not during compilation.
-    # See: https://discourse.julialang.org/t/julia-crashes-when-using-a-cfunction-from-another-module/98576/2
-
-    __OUTPUT_CB[] = @cfunction(__output_callback, Cvoid, (Cint, Ptr{UInt8}, Cint))
-    __JL_DROPREF[] = @cfunction(__jl_drop_array_ref, Nothing, (Ptr{Cuchar},))
-    __PASSTHROUGH_CB[] = @cfunction(__passthrough_callback, Nothing, (Ptr{Cuchar},))
-
-    IDL_ToutPush(__OUTPUT_CB[])
-
-    # Initializing REPL
-    #idl_repl()
+    IDL_ToutPush(__OUTPUT_CB())
 end
 
 end # module
