@@ -3,8 +3,9 @@ using .IDL
 using Test
 using JET
 using ExplicitImports
+using Aqua
 
-print_explicit_imports(IDL)
+IDL.init()
 
 const IDL_SCALAR_TYPES = [
 	UInt8 => "B",
@@ -27,6 +28,10 @@ end
 @testset "Arrays" begin
 	include("arrays.jl")
 end
+
+print_explicit_imports(IDL)
+
+Aqua.test_all(IDL)
 
 # @testset "GET: Structs" begin
 # 	@testset "Simple Struct" begin
