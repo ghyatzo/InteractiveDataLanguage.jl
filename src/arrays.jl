@@ -44,17 +44,15 @@ function Base.iterate(x::AbstractArrayView, state=(eachindex(x),))
 	y === nothing && return nothing
 	x[y[1]], (state[1], Base.tail(y)...)
 end
-Base.IteratorSize(::AbstractArrayView) 		= Base.HasLength()
-Base.IteratorEltype(::AbstractArrayView) 	= Base.HasEltype()
 
 function Base.getindex(x::AbstractArrayView{T, N}, i::Integer) where {T, N}
 	@boundscheck checkbounds(x, i)
 	convert(T, unsafe_load(data__(x), i))
 end
 
-function Base.setindex!(x::AbstractArrayView{T, N}, v::T, i) where {T <: JL_SCALAR, N}
+function Base.setindex!(x::AbstractArrayView{T, N}, v, i) where {T <: JL_SCALAR, N}
 	@boundscheck checkbounds(x, i)
-	unsafe_store!(data__(x), v, i)
+	unsafe_store!(data__(x), convert(T, v), i)
 end
 
 function Base.setindex!(x::AbstractArrayView{<:AbstractString}, v::AbstractString, i)
