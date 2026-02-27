@@ -1,225 +1,97 @@
-#=
-A structs will be a type that holds all the tag informations.
-That will be wrapped by an array.
+@comment begin
 
-So we will have IDLArrays{IDLStruct{of some kind}, N}
+	idlrun("arrstruct = [{A:2LL, B:3LL, C:FLTARR(3)}, {A:4LL, B:5LL, C:FLTARR(3)}]")
 
-with some overloads on the getindex properties to transparently return
-a single structure when not an array of structures.
-=#
+	@info InteractiveDataLanguage.IDL_GetVarAddr("arrstruct")
 
+	idlrun("arrstruct[1].A = 7LL")
 
+	@info InteractiveDataLanguage.IDL_GetVarAddr("arrstruct")
 
+	arrstruct = idlvar(:arrstruct)
+	varrstr = unsafe_load(arrstruct.ptr)
+	varrstr_data = varrstr.value.s.arr |> unsafe_load
 
+	data__ = varrstr_data.data
 
-## Hacky forward declaration of the IDLStruct structure
-## So that we can use it for the Nested structure tag type
-try struct IDLStruct{N, L, T, n}
-	sref::IDL_SREF
-	tags::NTuple{n, StructTag}
-	ptr::Ptr{UInt8}
-end catch; end
-
-
-struct StructTag{T}
-	value::T
-	offset::UInt
+	T = @NamedTuple{A::Int, B::Int, C::NTuple{Float32, 3}}
+	unsafe_wrap(Array, Ptr{T}(data__), (2,))
 end
 
-Base.eltype(::StructTag{T}) where T = T
-value(t::StructTag) = t.value
-offset(t::StructTag) = t.offset
+# using Accessors
+# using Accessors: IndexLens, PropertyLens, ComposedOptic
 
-gettag(s::StructTag{T}) where T = value(s)
-gettag(s::StructTag{Ptr{T}}) where T <: JL_SCALAR = unsafe_load(value(s))
-gettag(s::StructTag{IDL_STRING}) = convert(String, unsafe_load(value(s)))
+# struct UnsafeStoreLens!{L}
+#     inner::L
+# end
 
+# (l::UnsafeStoreLens!)(obj) = l.inner(obj)
+# function Accessors.set(obj, l::UnsafeStoreLens!{<: ComposedOptic}, val)
+# 	# We override the way we compose optics by rewrapping
+#     o_inner = l.inner.inner(obj)
+#     set(o_inner, UnsafeStoreLens!(l.inner.outer), val)
+# end
+# function Accessors.set(o, l::Lens!{PropertyLens{prop}}, val) where {prop}
+#     setproperty!(o, prop, val)
+#     o
+# end
+# function Accessors.set(o, l::Lens!{<:IndexLens}, val)
+#     o[l.pure.indices...] = val
+#     o
+# end
 
-
-_extract_tag_info(sref::IDL_SREF, i::Int) = begin
+_extract_tag_info(sdef, i::Int) = begin
 	_tagvar = Ref{Ptr{IDL_VARIABLE}}()
-	offset = IDL_StructTagInfoByIndex(sref.sdef, i - 1, IDL_MSG_RET, _tagvar)
+	offset = IDL_StructTagInfoByIndex(sdef, i - 1, IDL_MSG_RET, _tagvar)
 	if offset == -1
 		throw(ArgumentError("The structure does not have an $i-th tag."))
 	end
 
-	return IDLVariable(_tagvar[]), offset
+	return _tagvar[], offset
 end
 
+function parse_tags(sdef)
 
-function maketag(sref::IDL_SREF, i::Int, _dataroot)
-
-	tagvar, offset = _extract_tag_info(sref, i)
-
-	if isstruct(tagvar)
-		inners = IDLStruct(tagvar, _dataroot + offset)
-		return StructTag(inners, offset % UInt)
+	n = IDL_StructNumTags(sdef) % Int
+	names = ntuple(n) do i
+		tagname__ = IDL_StructTagNameByIndex(sdef, i-1, IDL_MSG_RET, C_NULL)
+		Symbol(unsafe_string(tagname__))
 	end
 
-	if isarray(tagvar)
-		arr = IDLArray(tagvar, _dataroot + offset)
-		return StructTag(arr, offset % UInt)
-	end
+	tagvar = Ref{Ptr{IDL_VARIABLE}}()
+	types = ntuple(n) do i
+		offset = IDL_StructTagInfoByIndex(sdef, i-1, IDL_MSG_RET, tagvar)
+		local tagvar = Variable(tagvar[])
 
-	if isscalar(tagvar)
-		_ptr = Ptr{jltype(_type(tagvar))}(_dataroot + offset)
-		return StructTag(_ptr, offset % UInt)
-	end
-end
+		elt = eltype(tagvar)
 
+		# If struct is also array, so we don't need to check for simple array.
+		# if we check for isstruct first.
+		if isstruct(tagvar)
+			return parse_tags(sdef(tagvar))
+		elseif isarray(tagvar)
+			N = arr_ndims(array__(tagvar))
+			dims =
+		else
 
-struct IDLStruct{N, L, T, n}
-	sref::IDL_SREF
-	tags::NTuple{n, StructTag}
-	ptr::Ptr{UInt8}
-end
-
-Base.propertynames(::IDLStruct{N, L, T, n}) where {N, L, T, n} = L
-Base.nameof(::IDLStruct{N, L, T, n}) where {N, L, T, n} = N
-ntags(::IDLStruct{N, L, T, n}) where {N, L, T, n} = n
-tags(::IDLStruct{N, L, T, n}) where {N, L, T, n} = L
-tagtypes(::IDLStruct{N, L, T, n}) where {N, L, T, n} = fieldtypes(T)
-tagtype(s::IDLStruct, i::Integer) = tagtypes(s)[i]
-tagtype(s::IDLStruct, t::Symbol) = begin
-	i = findfirst(==(t), tags(s))
-	isnothing(i) && throw(ErrorException("Struct has no tag '$t'"))
-
-	tagtype(s, i)
-end
-
-function IDLStruct(var::IDLVariable, inherited_data = C_NULL)
-	isstruct(var) || throw(ArgumentError("The variable must be a valid structure."))
-
-	sref = structdef(var)
-
-	_root = inherited_data == C_NULL ?
-		unsafe_load(sref.arr.data) : Ptr{UInt8}(inherited_data)
-
-	# The call returns an Int32, which somehow breaks ntuple
-	# We hardcast to an Int...
-	n = IDL_StructNumTags(sref.sdef) % Int
-
-	tags = ntuple(n) do i
-		IDL_StructTagNameByIndex(
-			sref.sdef, i - 1, IDL_MSG_RET, C_NULL
-		) |> unsafe_string |> Symbol
-	end
-
-	values = ntuple(n) do i
-		maketag(sref, i, _root)
-	end
-
-	_struct_name = Ref{Ptr{Cchar}}()
-	IDL_StructTagNameByIndex(sref.sdef, C_NULL, IDL_MSG_RET, _struct_name)
-	stname = unsafe_string(_struct_name[])
-
-	if stname == "<Anonymous>"
-		stname = "" # the <Anonymous> thing is hardcoded in IDL.
-	end
-	return IDLStruct{Symbol(stname), tags, typeof(values), n}(sref, values, _root)
-end
-
-
-_clone_tag(s::StructTag{A}, _newdataroot::Ptr) where {T, N, A <: IDLArray{T, N}} = begin
-	arrdef = value(s).meta
-	newarr = IDLArray{T, N}(arrdef, _newdataroot + offset(s))
-	StructTag(newarr, offset(s))
-end
-
-_clone_tag(s::StructTag{Ptr{T}}, _newdataroot::Ptr) where T <: JL_SCALAR = begin
-	StructTag(Ptr{T}(_newdataroot + offset(s)), offset(s))
-end
-
-_clone_tag(s::StructTag{T}, _newdataroot::Ptr) where T <: IDLStruct = begin
-	sref = value(s).sref
-	StructTag(sref, _newdataroot, offset)
-end
-
-
-## Efficiently create a new structure, using an already existing structure
-function IDLStruct(
-	s::IDLStruct{N, L, T, n}, _dataptr::Ptr{UInt8}
-) where {N, L, T, n}
-
-	values = ntuple(n) do i
-		tag = s.tags[i]
-
-		_clone_tag(tag, _dataptr)
-	end
-
-	return IDLStruct{N, L, T, n}(s.sref, values, _dataptr)
-end
-
-
-function IDLStruct{N, L, T, n}(values...) where {N, L, T, n}
-	N isa Symbol ||
-		throw(TypeError(:IDLStruct, Type{Symbol}, N))
-
-	L isa Tuple{Vararg{Symbol}} ||
-		throw(TypeError(:IDLStruct, Tuple{Vararg{Symbol}}, L))
-
-	T <: Tuple ||
-		throw(TypeError(:IDLStruct, Tuple{StructTag}, T))
-
-	eltypes = fieldtypes(T)
-	length(L) == length(values) == length(eltypes) == n ||
-		throw(ArgumentError("Inconsistent length across parameters."))
-
-	for (tag, type) in zip(values, eltypes)
-		tag isa type || throw(TypeError(:IDLStruct, type, tag))
-	end
-
-	return IDLStruct{N, L, T, n}(values, C_NULL) #FIXME: How to include julia defined data?
-end
-
-IDLStruct{N, L}(values...) where {N, L} =
-	IDLStruct{N, L, typeof(values), length(L)}(values, C_NULL)
-
-IDLStruct{L, T}(values...) where {L, T <: Tuple} =
-	IDLStruct{Symbol(""), L, T, length(L)}(values, C_NULL)
-
-IDLStruct{L}(values...) where {L} =
-	IDLStruct{Symbol(""), L, typeof(values), length(L)}(values, C_NULL)
-
-
-
-function Base.getproperty(s::IDLStruct{N, L, T, n}, f::Symbol) where {N, L, T, n}
-	f in fieldnames(IDLStruct) && return getfield(s, f)
-
-	i = findfirst(==(f), L)
-	isnothing(i) && throw(ErrorException("Struct has no tag '$f'"))
-
-	return gettag(s.tags[i])
-end
-
-
-
-
-
-
-
-
-function Base.show(io::IO, s::IDLStruct{N, L, T, n}) where {N, L, T, n}
-
-	if N == Symbol()
-		print(io, "IDLStruct{")
-		tag1, rtags... = L
-		val1, rvalues... = s.tags
-		print(io, "$tag1:$val1")
-		for (tag, value) in zip(rtags, rvalues)
-			print(io, ", $tag:$value")
 		end
-	else
-		print(io, "IDLStruct{$name")
-		for (tag, value) in zip(L, s.tags)
-			print(io, ", $tag:$value")
-		end
+
+
 	end
 
-	return print(io, "}")
+
+
 end
 
-Base.show(io::IO, t::StructTag) = print(io, gettag(t))
+struct Structure{T, V <: AbstractIDLVariable}
+	name::String
+	sdef::T
+	v::V
 
-# Display() used by the repl, uses show with a ::MIME"text/plain"
-# Base.show(io::IO, ::MIME"text/plain", x)
+	function Structure(v::V) where V <: AbstractIDLVariable
+		structdef = sdef(v)
+
+
+
+	end
+end
