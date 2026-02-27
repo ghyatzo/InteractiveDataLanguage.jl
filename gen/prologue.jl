@@ -1,0 +1,4 @@
+IDL_STRINGIFY2(s) = string(s)
+
+IDL_STRINGIFY(s) = IDL_STRINGIFY2(s)
+
