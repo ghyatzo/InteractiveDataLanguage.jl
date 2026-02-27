@@ -94,6 +94,7 @@ idlvar(x::UnsafeView) = getfield(x, :v)
 
 mutable struct ArrayView{T, N, V} <: AbstractArrayView{T, N}
 	safety::Bool
+	extern::Bool
 	const v::V
 	const arr::Ptr{IDL_ARRAY}
 
@@ -102,7 +103,7 @@ mutable struct ArrayView{T, N, V} <: AbstractArrayView{T, N}
 		N = arr_ndims(arr__)
 		T = eltype(v)
 
-		this = new{T, N, V}(true, v, arr__)
+		this = new{T, N, V}(true, false, v, arr__)
 		weakthis = WeakRef(this)
 
 		cb = (p__::Ptr{Cuchar}) -> begin
@@ -112,6 +113,7 @@ mutable struct ArrayView{T, N, V} <: AbstractArrayView{T, N}
 			local this = weakthis.value
 			if this !== nothing
 				setfield!(this, :safety, false)
+				setfield!(this, :extern, true)
 			end
 			# if called, it means that the data is not valid anymore, delete this callback in any case.
 			delete!(CB_HOLDING, p__)
@@ -137,6 +139,7 @@ mutable struct ArrayView{T, N, V} <: AbstractArrayView{T, N}
 				delete!(CB_HOLDING, arr_data__(getfield(this, :arr)))
 
 				setfield!(this, :safety, false)
+				setfield!(this, :extern, false)
 			end
 
 			return nothing
@@ -146,7 +149,7 @@ end
 
 function safetycheck(x::ArrayView)
 	getfield(x, :safety) || throw(InvalidStateException("""
-		The array the view was pointing to has been freed.\n
+		The array the view was pointing to has been freed $(getfield(x, :extern) ? " by IDL" : " by Julia.")\n
 		To continue using the binding convert it back to a generic variable with `idlvar`.""",
 	:ArrayView))
 end
