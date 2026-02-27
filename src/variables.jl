@@ -60,6 +60,8 @@ const ALL_T = Ref{IDL_ALLTYPES}()
 abstract type AbstractIDLVariable end
 function varptr__ end
 
+isvalid(v::AbstractIDLVariable) 		= IDL_TYP(vartype(getfield(v, :ptr)))  != T_UNDEF
+
 varflags(v::AbstractIDLVariable) 		= varflags(varptr__(v))
 vartype(v::AbstractIDLVariable) 		= IDL_TYP(vartype(varptr__(v)))
 Base.eltype(v::AbstractIDLVariable) 	= jltype(vartype(v))
@@ -78,13 +80,13 @@ Base.isnothing(v::AbstractIDLVariable) 	= (varflags(v) & IDL_V_NULL) != 0
 
 
 ## TODO: maybe use the internal "ENSURE etc etc" functions from idl.
-isvalid(v::AbstractIDLVariable) 	= vartype(v)  != T_UNDEF
 checkvalid(v::AbstractIDLVariable) 	= isvalid(v)  || throw(UndefVarError(Symbol(name(v)), "IDL"))
 checkarray(v::AbstractIDLVariable) 	= isarray(v)  || throw(ErrorException("The variable is not an array."))
 checkstruct(v::AbstractIDLVariable) = isstruct(v) || throw(ErrorException("The variable is not a structure."))
 checkscalar(v::AbstractIDLVariable) = isscalar(v) || throw(ErrorException("The variable is not a scalar."))
 
 array__(v::AbstractIDLVariable) = (checkarray(v); return vararray__(varptr__(v)))
+sdef(v::AbstractIDLVariable) = (checkstruct(v); return varsdef(varptr__(v)))
 
 idlcopyvar!(dst::AbstractIDLVariable, src::AbstractIDLVariable) = IDL_VarCopy(varptr__(src), varptr__(dst))
 
@@ -303,21 +305,27 @@ jlscalar(::Type{T}, name::Symbol) where {T<:JL_SCALAR} = jlscalar(T, idlvar(name
 
 
 function Base.show(io::IO, s::AbstractIDLVariable)
+	if !isvalid(s)
+		print(io, "IDL.Variable: UNDEFINED")
+		return
+	end
+
 	conststr = isconst(s) ? "CONST " : ""
 	tempstr = istemp(s) ? "TEMP " : ""
-	validstr = isvalid(s) ? "" : "UNDEF"
+	variablename = name(s)
 
-	variablename = unsafe_string(IDL_VarName(varptr__(s)))
+	print(io, "IDL.Variable: $conststr$tempstr'$variablename' - ")
 
-	print(io, "IDL.Variable: $conststr$tempstr'$variablename' - $validstr")
-	isvalid(s) || return
-
-	typestr = isstruct(s) ? "STRUCT" :
+	jltypestr = isstruct(s) ? "Type" :
+		isfile(s) ? "FILE" :
+		isboolean(s) ? "Bool" :
+		eltype(s)
+	idltypestr = isstruct(s) ? "STRUCT" :
 		isfile(s) ? "FILE" :
 		isboolean(s) ? "BOOL" :
-		eltype(s)
+		idltype(eltype(s))
 
-	print(io, typestr)
+	print(io, "$jltypestr | $idltypestr")
 	if issimplearray(s)
 		print(io, " (ARRAY)")
 	end
