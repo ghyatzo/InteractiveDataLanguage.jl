@@ -1,23 +1,18 @@
 name = "InteractiveDataLanguage"
 uuid = "d8fbff9c-ffdd-4f12-b08d-aa41cc43ce74"
+version = "0.3.0"
 authors = ["Camillo Schenone"]
-version = "0.1.0"
+
+[workspace]
+projects = ["test", "gen"]
 
 [deps]
 CEnum = "fa961155-64e5-5f13-b03f-caf6b980ea82"
 REPL = "3fa0cd96-eef1-5676-8a61-b3b8758bbffb"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
-StaticArraysCore = "1e83bf80-4336-4d27-bf5d-d5a4f845583c"
 
 [compat]
 CEnum = "0.5.0"
-StaticArrays = "1.9.10"
-StaticArraysCore = "1.4.3"
-
-[extras]
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
-ExplicitImports = "7d51a73a-1435-4ff3-83d9-f097790105c7"
-
-[targets]
-test = ["Test", "JET", "ExplicitImports"]
+REPL = "1.11.0"
+StaticArrays = "1.9.15"
+julia = "1.12"
