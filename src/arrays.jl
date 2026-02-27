@@ -175,15 +175,6 @@ function idldims(arr::AbstractArray{T, N}) where {T, N}
 
 	DIMS[1:N] .= IDL_MEMINT.(size(arr))
 	DIMS[N+1:end] .= zero(IDL_MEMINT)
-	# IDL is colum major in memory but arrays have first and second dimensions swapped
-
-	return DIMS
-end
-
-function idldims(arr::AbstractVector)
-
-	DIMS .= zero(IDL_MEMINT)
-	DIMS[1] = length(arr)
 
 	return DIMS
 end
@@ -243,7 +234,11 @@ function idlwrap(name::Symbol, arr::Array{T, N}) where {T<:JL_SCALAR, N}
 	return Variable(var__)
 end
 
-idlwrap(v::Variable, arr::Array{T, N}) where {T<:JL_SCALAR, N} = idlwrap(Symbol(name(v)), arr)
+
+struct IDLview; x end
+idlview(arr::Array) = IDLview(arr)
+
+Base.setproperty!(::IDLMain, x::Symbol, v::IDLview) = idlwrap(x, v.x)
 
 function idlarray(v::Variable, arr::Array{T, N}) where {T<:JL_SCALAR, N}
 
@@ -254,7 +249,11 @@ function idlarray(v::Variable, arr::Array{T, N}) where {T<:JL_SCALAR, N}
 	return v
 end
 
-idlarray(name::Symbol, arr::Array{T, N}) where {T<:JL_SCALAR, N} = idlarray(idlvar(name, undef), arr)
+# instead of initializing an undef variable we initialize a scalar variable with the correct type already
+# and then "upgrade" it to an array.
+idlarray(name::Symbol, arr::Array{T, N}) where {T<:JL_SCALAR, N} = idlarray(idlvar(name, one(T)), arr)
+
+idlvar(name::Symbol, x::Array{T, N}) where {T<:JL_SCALAR, N} = idlarray(name, x)
 
 #============================================================#
 #
@@ -263,7 +262,6 @@ idlarray(name::Symbol, arr::Array{T, N}) where {T<:JL_SCALAR, N} = idlarray(idlv
 #============================================================#
 
 
-idlvar(name::Symbol, x::Array{T, N}) where {T<:JL_SCALAR, N} = idlarray(name, x)
 
 # From IDL memory to Julia
 unsafe_jlview(v::AbstractIDLVariable) = UnsafeView(v)
