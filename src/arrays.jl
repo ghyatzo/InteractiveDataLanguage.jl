@@ -124,7 +124,7 @@ mutable struct ArrayView{T, N, V} <: AbstractArrayView{T, N}
 		# each callback is associated with the array data pointer
 		# that, when freed, would call it
 		preserve_cb(arr_data__(arr__), cb)
-		_set_free_cb(array__(v), __PASSTHROUGH_CB[])
+		_set_free_cb(array__(v), __PASSTHROUGH_CB())
 
 		finalizer(this) do this
 			# We must check that the data has not been freed, since this finalizer
@@ -210,7 +210,7 @@ function maketempwrap(arr::Array{T,N}) where {T<:JL_SCALAR, N}
 	rooted_data__ = preserve_ref__(pointer(arr), arr.ref)
 
 	var__ = IDL_ImportArray(
-		N, idldims(arr), idltype(T), rooted_data__, __JL_DROPREF[], C_NULL
+		N, idldims(arr), idltype(T), rooted_data__, __JL_DROPREF_CB(), C_NULL
 	)
 
 	TemporaryVariable(var__)
@@ -230,13 +230,14 @@ function maketemp(arr::Array{<:AbstractString, N}) where {N}
 	return tmpvar
 end
 
+
 function idlwrap(name::Symbol, arr::Array{T, N}) where {T<:JL_SCALAR, N}
 	@boundscheck checkdims(arr)
 
 	rooted_data__ = preserve_ref__(pointer(arr), arr.ref)
 
 	var__ = IDL_ImportNamedArray(
-		name, N, idldims(arr), idltype(T), rooted_data__, __JL_DROPREF[], C_NULL
+		name, N, idldims(arr), idltype(T), rooted_data__, __JL_DROPREF_CB(), C_NULL
 	)
 
 	return Variable(var__)
