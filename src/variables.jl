@@ -1,41 +1,44 @@
-# When you instantiate a variable s, that variable can hold
-# any type! "reassigning" it doesn't change it's memory address!!
-# instead it gets rewritten!
+#=
+	When you instantiate a variable s, that variable can hold
+	any type! "reassigning" it doesn't change it's memory address!!
+	instead it gets rewritten!
 
-# julia> IDL.execute("s = 120")
+	julia> IDL.execute("s = 120")
 
-# julia> _var = IDL.IDL_GetVarAddr("s")
-# Ptr{IDL.IDL_VARIABLE} @0x00000238ce6b7c40
+	julia> _var = IDL.IDL_GetVarAddr("s")
+	Ptr{IDL.IDL_VARIABLE} @0x00000238ce6b7c40
 
-# julia> IDL.execute("s = 'hello'")
+	julia> IDL.execute("s = 'hello'")
 
-# julia> _var = IDL.IDL_GetVarAddr("s")
-# Ptr{IDL.IDL_VARIABLE} @0x00000238ce6b7c40
+	julia> _var = IDL.IDL_GetVarAddr("s")
+	Ptr{IDL.IDL_VARIABLE} @0x00000238ce6b7c40
 
-# julia> IDL.execute("s = [1,2,3]")
+	julia> IDL.execute("s = [1,2,3]")
 
-# julia> _var = IDL.IDL_GetVarAddr("s")
-# Ptr{IDL.IDL_VARIABLE} @0x00000238ce6b7c40
+	julia> _var = IDL.IDL_GetVarAddr("s")
+	Ptr{IDL.IDL_VARIABLE} @0x00000238ce6b7c40
 
-# julia> IDL.execute("s = !NULL")
+	julia> IDL.execute("s = !NULL")
 
-# julia> _var = IDL.IDL_GetVarAddr("s")
-# Ptr{IDL.IDL_VARIABLE} @0x00000238ce6b7c40
+	julia> _var = IDL.IDL_GetVarAddr("s")
+	Ptr{IDL.IDL_VARIABLE} @0x00000238ce6b7c40
 
-# julia> IDL.IDL_Delvar(_var)
+	julia> IDL.IDL_Delvar(_var)
 
-# julia> _var = IDL.IDL_GetVarAddr("s")
-# Ptr{IDL.IDL_VARIABLE} @0x00000238ce6b7c40
+	julia> _var = IDL.IDL_GetVarAddr("s")
+	Ptr{IDL.IDL_VARIABLE} @0x00000238ce6b7c40
 
 
-## Even deleting a variable simply makes it an undef!
-## IDL Variables are always valid basically...
+	Even deleting a variable simply makes it an undef!
+	IDL Variables are always valid basically...
+=#
 
 #========================================#
 #
 #	Accessors to C struct fields
 #
 #========================================#
+const ALL_T = Ref{IDL_ALLTYPES}()
 
 # idl doesn't like '#'
 idlgensym(tag="jl") 					= replace(String(gensym(tag)), "#" => "_")
@@ -48,7 +51,6 @@ varsdef(var__::Ptr{IDL_VARIABLE}) 		= unsafe_load(var__.value.s)
 varscalar(var__::Ptr{IDL_VARIABLE}) 	=
 	unsafe_load(Base.getproperty(var__.value, _alltypes_sym(vartype(var__))))
 
-const ALL_T = Ref{IDL_ALLTYPES}()
 
 #========================================#
 #
@@ -121,7 +123,6 @@ varptr__(v::Variable) = getfield(v, :ptr)
 #
 #========================================#
 
-safeprintln(str::String) = ccall(:jl_safe_printf, Cvoid, (Cstring, ), str * "\n")
 mutable struct TemporaryVariable <: AbstractIDLVariable
 	ptr::Ptr{IDL_VARIABLE}
 	safety::Bool
@@ -164,7 +165,7 @@ maketemp(x::Cdouble) 			= TemporaryVariable(IDL_GettmpDouble(x))
 
 function idlcopyvar!(dst::AbstractIDLVariable, src::TemporaryVariable)
 	IDL_VarCopy(varptr__(src), varptr__(dst))
-	# VarCopy frees the temporary variable if it's the source.
+	#= VarCopy frees the temporary variable if it's the source. =#
 	setfield!(src, :safety, false)
 end
 
@@ -192,6 +193,12 @@ function set!(v::AbstractIDLVariable, x::AbstractString)
 	return v
 end
 
+#========================================#
+#
+#	Converting from Julia to IDL
+#
+#========================================#
+
 
 function idlvar(name::Symbol)
 	var__ = IDL_GetVarAddr(String(name))
@@ -202,7 +209,20 @@ function idlvar(name::Symbol)
 	return Variable(var__)
 end
 
+function idlvar(name::Symbol, v::AbstractIDLVariable)
+	var__ = IDL_GetVarAddr(String(name))
+
+	if var__ == C_NULL
+		var__ = IDL_GetVarAddr1(String(name), IDL_TRUE)
+	end
+
+	var = Variable(var__)
+	idlcopyvar!(var, v)
+	return var
+end
+
 function idlvar(name::Symbol, ::UndefInitializer)
+	idlrun("$(String(name)) = !NULL") # there doesn't seem to be a way to get the !NULL variable through the API. We cheat like this.
 	var__ = IDL_GetVarAddr(String(name))
 
 	if var__ == C_NULL
@@ -210,7 +230,6 @@ function idlvar(name::Symbol, ::UndefInitializer)
 		return var
 	end
 
-	IDL_StoreScalarZero(var__, C_NULL)
 	return Variable(var__)
 end
 
@@ -224,6 +243,18 @@ function idlvar(name::Symbol, x::T) where {T <: JL_SCALAR}
 	end
 
 	v = set!(Variable(var__), x)
+end
+
+function idlvar(name::Symbol, ::Nothing)
+	idlrun("$(String(name)) = !NULL") # there doesn't seem to be a way to get the !NULL variable through the API. We cheat like this.
+	var__ = IDL_GetVarAddr(String(name))
+
+	if var__ == C_NULL
+		var = Variable(IDL_GetVarAddr1(String(name), IDL_TRUE))
+		return var
+	end
+
+	return Variable(var__)
 end
 
 function idlvar(name::Symbol, x::String)
@@ -256,9 +287,16 @@ function Base.convert(::Type{T}, v::AbstractIDLVariable) where T <: JL_SCALAR
 	convert(T, r)
 end
 
+function Base.convert(::Type{Nothing}, v::AbstractIDLVariable)
+	!isvalid(v) || error_convert_incompatible_types(eltype(v), Nothing)
+	nothing
+end
+
+
 # [!WARN]
 # Complex numbers get truncated. Only the real part gets translated.
 # In line with IDL behaviour
+
 function Base.convert(::Type{String}, v::AbstractIDLVariable)
 	eltype(v) == String || error_convert_incompatible_types(eltype(v), String)
 	unsafe_string(IDL_VarGetString(varptr__(v)))
@@ -266,33 +304,33 @@ end
 
 function Base.convert(::Type{Bool}, v::AbstractIDLVariable)
 	isboolean(v) || error_convert_incompatible_types(eltype(v), Bool)
-	Bool(unsafe_load(varscalar(varptr__(v))))
+	Bool(unsafe_load(varscalar(varptr__(v))))::Bool
 end
 
 # These attempt automatic transformation which is quicker
 function Base.convert(::Type{Int32}, v::AbstractIDLVariable)
 	isscalar(v) || error_convert_incompatible_types(eltype(v), Int32)
-	IDL_LongScalar(varptr__(v))
+	IDL_LongScalar(varptr__(v))::Int32
 end
 
 function Base.convert(::Type{UInt32}, v::AbstractIDLVariable)
 	isscalar(v) || error_convert_incompatible_types(eltype(v), UInt32)
-	IDL_ULongScalar(varptr__(v))
+	IDL_ULongScalar(varptr__(v))::UInt32
 end
 
 function Base.convert(::Type{Int64}, v::AbstractIDLVariable)
 	isscalar(v) || error_convert_incompatible_types(eltype(v), Int64)
-	IDL_Long64Scalar(varptr__(v))
+	IDL_Long64Scalar(varptr__(v))::Int64
 end
 
 function Base.convert(::Type{UInt64}, v::AbstractIDLVariable)
 	isscalar(v) || error_convert_incompatible_types(eltype(v), UInt64)
-	IDL_ULong64Scalar(varptr__(v))
+	IDL_ULong64Scalar(varptr__(v))::UInt64
 end
 
 function Base.convert(::Type{Float64}, v::AbstractIDLVariable)
 	isscalar(v) || error_convert_incompatible_types(eltype(v), Float64)
-	IDL_DoubleScalar(varptr__(v))
+	IDL_DoubleScalar(varptr__(v))::Float64
 end
 
 
