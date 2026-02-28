@@ -33,7 +33,8 @@ export IDL,
     idlarray,
     idlsimilar,
     maketempwrap,
-    idlwrap
+    idlwrap,
+    idlview
 
 # idl must be in path.
 if Sys.isunix()
