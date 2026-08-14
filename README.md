@@ -50,8 +50,8 @@ Current support:
 - [ ] Objects (probably not planned)
 
 Extras:
-- [ ] REPL Mode (`IDL>` prompt)
-- [ ] `@idl_str` macro
+- [x] REPL Mode (`IDL>` prompt)
+- [x] `@idl_str` macro
 - [ ] automatic interpolation of variables from julia and idl
 
 Currently the package provides the bare minimum to have some basic interaction between IDL and julia.
@@ -345,4 +345,16 @@ julia> ms_zero.S = 7
 
 ### Running arbitrary IDL strings
 This package provides the `idlrun` function that sends to idl a string to be evaluated, as if you're typing it in the IDL console. Accepts multiline strings, with comments and linebreaks.
+The same functionality is also available as a string macro:
+```julia
+julia> idl"x = 10LL"
+
+julia> IDL.x[]
+10
+```
+
+### REPL Mode
+Calling `idlrepl()` installs an `IDL> ` prompt in the julia REPL.
+Enter it with `>` on an empty julia prompt and exit it with backspace on an empty input, like the shell and help modes.
+Every line is sent to IDL exactly like `idlrun` would.
 

@@ -22,6 +22,8 @@ using StaticArrays: StaticArrays, SizedVector
 
 export IDL,
     idlrun,
+    @idl_str,
+    idlrepl,
 
     idlvar,
     jlscalar,
@@ -142,6 +144,19 @@ idlrun(string::AbstractString) = begin
     end
 end
 
+"""
+    idl"..."
+
+Execute the given string as IDL code, exactly like [`idlrun`](@ref).
+
+```julia
+idl"x = 10LL"
+```
+"""
+macro idl_str(str)
+    :(idlrun($str))
+end
+
 function Base.getindex(v::AbstractIDLVariable)
     return isstruct(v) ? jlstruct(v) : isarray(v) ? jlview(v) : jlscalar(v)
 end
@@ -163,7 +178,7 @@ Base.setproperty!(::IDLMain, x::Symbol, v) = idlvar(x, v)
 
 
 # include("common.jl")
-# include("IDLREPL.jl")
+include("IDLREPL.jl")
 
 const init = Base.OncePerProcess{Nothing}() do
     @info "Acquiring License..."

@@ -32,6 +32,10 @@ end
 	include("structs.jl")
 end
 
+@testset "REPL" begin
+	include("repl.jl")
+end
+
 print_explicit_imports(IDL)
 
 # Aqua.test_all(IDL)
