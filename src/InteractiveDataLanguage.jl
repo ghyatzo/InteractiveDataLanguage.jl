@@ -34,7 +34,12 @@ export IDL,
     idlsimilar,
     maketempwrap,
     idlwrap,
-    idlview
+    idlview,
+
+    jlstruct,
+    idlstruct,
+    ntags,
+    tags
 
 # idl must be in path.
 if Sys.isunix()
@@ -125,6 +130,7 @@ const IDL = IDLMain()
 include("type_conversion.jl")
 include("variables.jl")
 include("arrays.jl")
+include("structs.jl")
 
 
 idlrun(string::AbstractString) = begin
@@ -137,7 +143,7 @@ idlrun(string::AbstractString) = begin
 end
 
 function Base.getindex(v::AbstractIDLVariable)
-    return isarray(v) ? jlview(v) : jlscalar(v)
+    return isstruct(v) ? jlstruct(v) : isarray(v) ? jlview(v) : jlscalar(v)
 end
 
 function Base.setindex!(v::AbstractIDLVariable, x::T) where
@@ -147,12 +153,15 @@ function Base.setindex!(v::AbstractIDLVariable, x::T) where
     set!(v, x)
 end
 
+function Base.setindex!(v::AbstractIDLVariable, x::Union{NamedTuple, AbstractArray{<:NamedTuple}})
+    idlcopyvar!(v, maketemp(x))
+end
+
 
 Base.getproperty(::IDLMain, x::Symbol) = idlvar(x)
 Base.setproperty!(::IDLMain, x::Symbol, v) = idlvar(x, v)
 
 
-# include("structs.jl")
 # include("common.jl")
 # include("IDLREPL.jl")
 

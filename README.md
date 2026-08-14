@@ -41,9 +41,12 @@ Current support:
 	- [x] Julia -> IDL (Copy data)
 	- [x] Initialize IDL arrays from Julia
 	- [x] Create temporary arrays
-- [ ] Structures
-	- [ ] IDL -> Julia
-	- [ ] Julia -> IDL
+- [x] Structures
+	- [x] IDL -> Julia (No copy data)
+	- [x] Julia -> IDL (Copy data)
+	- [x] Nested structures
+	- [x] Arrays of structures
+	- [x] Named structures
 - [ ] Objects (probably not planned)
 
 Extras:
@@ -53,7 +56,7 @@ Extras:
 
 Currently the package provides the bare minimum to have some basic interaction between IDL and julia.
 
-Notable missing features are passing structures between the two runtimes as well as handling objects. While structures are relatively easier, full support for all objects types is probably out of scope for this package.
+Notable missing features are handling objects. Full support for all objects types is probably out of scope for this package.
 
 I've been developing this package out of personal need, and will expand it accordingly as the need arise or if there is enough interest/necessity.
 
@@ -279,18 +282,66 @@ julia> IDL.jlmultiarr = zeros(3,5)
 
 If performance is of the essence, it is possible to use an `unsafe_jlview` that performs no checks on the liveliness of the IDL data. It goes without saying that you'll be responsible to make sure the data will be always available. Otherwise expect violent crashes and segfaults that will bring down the whole julia session.
 
-<!-- ### Structures:
-Structures in IDL are not like structures in Julia, instead they are more akin to
-"optionally named" named tuples. An example of structure in idl is of the form:
-`idl_struct = {NAME, TAG1:1, TAG2:2, TAG3:3}` or anonymous structures as
-`anon_struct = {TAG1:1, TAG2:2, TAG3:3}`.
+## Structures
+IDL structures are not like structures in Julia, they are closer to "optionally named" named tuples: `{TAG1:1, TAG2:2}` or `{MYSTRUCT, TAG1:1, TAG2:2}`. Internally a structure is always an array of structures, even when it holds a single element.
 
-When translating from idl to julia the struct type information will be stored in a wrapper type
-with all its tags, that wraps IDL memory. The IDL structures in julia behaves as if a normal structure with property accessors.
+Retrieving a structure gives a live view over the IDL memory, no copy is made. Tags are accessed as properties (case insensitive, like IDL):
+```julia
+julia> idlrun("s = {A:42, B:{A2:69, B2:[123, 321]}, C:'hello'}")
 
->[!WARN]
-> Currently it is not (yet) possible to pass structured data from julia to IDL directly.
-> If absolutely needed one can construct a string that defines the structure in IDL syntax and generate it directly in idl via a `IDL.execute` call. -->
+julia> s = IDL.s[]
+IDLStruct{A: 69, B: IDLStruct{A2: 69, B2: Int16[123, 321]}, C: hello}
+
+julia> s.A, s.C
+(Int16(42), "hello")
+
+julia> s.b.b2[2] = 999 # nested tags and array tags are views too
+
+julia> idlrun("print, s.B.B2")
+         123         999
+```
+Arrays of structures behave like normal julia arrays of views:
+```julia
+julia> idlrun("sa = [{A:1, B:2}, {A:4, B:10}]")
+
+julia> sa = IDL.sa[]
+
+julia> sa[2].A = 7
+
+julia> idlrun("print, sa[1].A") # IDL arrays are 0-based
+       7
+```
+
+To pass a structure from julia to IDL, use a `NamedTuple` (arrays of `NamedTuple`s for arrays of structures). IDL allocates and owns the memory, the data is copied over:
+```julia
+julia> idlstruct(:js, (A=Int32(1), B=Float32[1,2,3], C="hello", D=(X=Int16(4),)))
+
+julia> idlrun("print, js.D.X")
+       4
+
+# or assign directly
+julia> IDL.js2 = (A=1, B=[1.0, 2.0])
+
+# or through a variable
+julia> v = idlvar(:js3); v[] = (A=Int16(9),)
+```
+Named structures are supported by passing the structure name as a third argument. IDL enforces that all instances of a named structure share the same tag definition:
+```julia
+julia> idlstruct(:ms, (S=Int16(1), B="x"), :MYSTRUCT)
+
+julia> idlrun("ms2 = {MYSTRUCT, S:7, B:'!'}") # valid on the IDL side too
+```
+An existing named definition can also be instantiated with zeroed tags, exactly like `s = {MYSTRUCT}` on the IDL side. The tags can then be filled one by one through the view:
+```julia
+julia> idlstruct(:ms_zero, type=:MYSTRUCT)
+
+julia> ms_zero = IDL.ms_zero[]
+
+julia> ms_zero.S = 7
+```
+
+> [!WARN]
+> A `StructView` is only valid while the underlying IDL variable keeps holding that structure. If IDL frees or replaces the data (for example with `idlrun("s = 42")`), a held view will point at freed memory. Re-fetch it with `jlstruct` instead of holding on to it across IDL calls.
 
 ### Running arbitrary IDL strings
 This package provides the `idlrun` function that sends to idl a string to be evaluated, as if you're typing it in the IDL console. Accepts multiline strings, with comments and linebreaks.
