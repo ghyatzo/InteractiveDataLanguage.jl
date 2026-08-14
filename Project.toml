@@ -1,6 +1,6 @@
 name = "InteractiveDataLanguage"
 uuid = "d8fbff9c-ffdd-4f12-b08d-aa41cc43ce74"
-version = "0.3.1"
+version = "0.3.2"
 authors = ["Camillo Schenone"]
 
 [workspace]
