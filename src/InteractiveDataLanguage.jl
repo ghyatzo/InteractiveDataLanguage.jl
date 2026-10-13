@@ -152,12 +152,21 @@ Base.getproperty(::IDLMain, x::Symbol) = idlvar(x)
 Base.setproperty!(::IDLMain, x::Symbol, v) = idlvar(x, v)
 
 
+# IDL reports "% Program caused arithmetic error" for any float exception flag
+# that is set when a statement finishes (!EXCEPT). Julia sets those sticky flags
+# and never clears them, so IDL would report Julia's arithmetic as its own.
+# shortcut: cleared before each statement, so flags set by Julia code running
+# inside an IDL statement (an output callback, say) still surface.
+clear_float_exceptions() = Sys.iswindows() ?
+    ccall(:_clearfp, Cuint, ()) :
+    ccall(:feclearexcept, Cint, (Cint,), 0x3f)  # FE_ALL_EXCEPT is 0x3d on glibc/Darwin x86, 0x1f on Darwin arm64
 
 idlrun(string::AbstractString) = begin
     # remove comments and coalesce line breaks
     string = replace(replace(string, r";.*" => ""), r"\$\s*\n" => "")
     iostring = IOBuffer(string)
     for line in eachline(iostring)
+        clear_float_exceptions()
         IDL_ExecuteStr(line)
     end
 end

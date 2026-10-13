@@ -24,6 +24,15 @@ const IDL_SCALAR_TYPES = [
 	include("scalar_values.jl")
 end
 
+@testset "Float exceptions" begin
+	# Float ops in Julia leave the hardware exception flags set, and IDL's
+	# !EXCEPT mechanism reports them as its own arithmetic errors unless they
+	# are cleared before each statement.
+	z = Ref(0.0)
+	@test isnan(z[] / z[])
+	@test_logs min_level = Base.CoreLogging.Error idlrun("float_except_probe = 1")
+end
+
 @testset "Arrays" begin
 	include("arrays.jl")
 end
