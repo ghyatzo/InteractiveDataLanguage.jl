@@ -62,7 +62,7 @@ safeprintln(str::String) = ccall(:jl_safe_printf, Cvoid, (Cstring, ), str * "\n"
 
 macro comment(_...) end
 
-include("../lib/lib_idl-v1.12.jl")
+include("../lib/$(Sys.MACHINE).jl")
 
 # === CALLBACKS and REFERENCE ROOTING
 const JL_ARR_ROOT = Dict{Ptr, Ref}()
@@ -75,8 +75,6 @@ const ERROR_MSG = Ref{String}("")
 
 @inline preserve_ref__(x__::Ptr, x::Ref) = (JL_ARR_ROOT[convert(Ptr{UInt8}, x__)] = x; return convert(Ptr{UInt8}, x__))
 @inline preserve_cb(x__::Ptr, cb::Base.Callable) = CB_HOLDING[x__] = cb
-
-
 
 function __jl_drop_array_ref(_p::Ptr{Cuchar})::Cvoid
     #safeprintln("Dropping pointer: $_p")
@@ -134,6 +132,26 @@ include("variables.jl")
 include("arrays.jl")
 include("structs.jl")
 
+function Base.getindex(v::AbstractIDLVariable)
+    return isstruct(v) ? jlstruct(v) : isarray(v) ? jlview(v) : jlscalar(v)
+end
+
+function Base.setindex!(v::AbstractIDLVariable, x::T) where
+{
+    T<:Union{JL_SCALAR, AbstractString}
+}
+    set!(v, x)
+end
+
+function Base.setindex!(v::AbstractIDLVariable, x::Union{NamedTuple, AbstractArray{<:NamedTuple}})
+    idlcopyvar!(v, maketemp(x))
+end
+
+
+Base.getproperty(::IDLMain, x::Symbol) = idlvar(x)
+Base.setproperty!(::IDLMain, x::Symbol, v) = idlvar(x, v)
+
+
 
 idlrun(string::AbstractString) = begin
     # remove comments and coalesce line breaks
@@ -156,25 +174,6 @@ idl"x = 10LL"
 macro idl_str(str)
     :(idlrun($str))
 end
-
-function Base.getindex(v::AbstractIDLVariable)
-    return isstruct(v) ? jlstruct(v) : isarray(v) ? jlview(v) : jlscalar(v)
-end
-
-function Base.setindex!(v::AbstractIDLVariable, x::T) where
-{
-    T<:Union{JL_SCALAR, AbstractString}
-}
-    set!(v, x)
-end
-
-function Base.setindex!(v::AbstractIDLVariable, x::Union{NamedTuple, AbstractArray{<:NamedTuple}})
-    idlcopyvar!(v, maketemp(x))
-end
-
-
-Base.getproperty(::IDLMain, x::Symbol) = idlvar(x)
-Base.setproperty!(::IDLMain, x::Symbol, v) = idlvar(x, v)
 
 
 # include("common.jl")

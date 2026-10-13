@@ -1,4 +1,10 @@
-# module LibIDL
+using CEnum: CEnum, @cenum
+
+IDL_STRINGIFY2(s) = string(s)
+
+IDL_STRINGIFY(s) = IDL_STRINGIFY2(s)
+
+
 
 const IDL_LONG64 = Clonglong
 
@@ -11,10 +17,9 @@ const UCHAR = Cuchar
 
 const IDL_LONG = Clong
 
-primitive type IDL_ALLTYPES 16 * 8 end
-# struct IDL_ALLTYPES
-#     data::NTuple{2, UInt64}
-# end
+struct IDL_ALLTYPES
+    data::NTuple{16, UInt8}
+end
 
 function Base.getproperty(x::Ptr{IDL_ALLTYPES}, f::Symbol)
     f === :sc && return Ptr{Cchar}(x + 0)
@@ -36,7 +41,7 @@ function Base.getproperty(x::Ptr{IDL_ALLTYPES}, f::Symbol)
     f === :memint && return Ptr{IDL_LONG64}(x + 0)
     f === :fileint && return Ptr{IDL_LONG64}(x + 0)
     f === :ptrint && return Ptr{IDL_PTRINT}(x + 0)
-    throw(UndefRefError())
+    return getfield(x, f)
 end
 
 function Base.getproperty(x::IDL_ALLTYPES, f::Symbol)
@@ -50,41 +55,44 @@ function Base.setproperty!(x::Ptr{IDL_ALLTYPES}, f::Symbol, v)
     unsafe_store!(getproperty(x, f), v)
 end
 
-# =-=-= CUSTOM ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# julia seems to ignore the hidden alignment padding.
-# There is an extra 6 byte padding between flags and value.
-
-# SOLVED: The issue was in how Clang represent C unions
-# since NTuples align with respect to its eltype, while C unions
-# align wrt the biggest alignment of the union.
-struct IDL_VARIABLE
-    type::UCHAR
-    flags::UCHAR
-    flags2::UCHAR # internal. don't use.
-    value::IDL_ALLTYPES
+function Base.propertynames(x::IDL_ALLTYPES, private::Bool = false)
+    (:sc, :c, :i, :ui, :l, :ul, :l64, :ul64, :f, :d, :cmp, :dcmp, :str, :arr, :s, :hvid, :memint, :fileint, :ptrint, if private
+            fieldnames(typeof(x))
+        else
+            ()
+        end...)
 end
 
-# 5 byte pad between the flag byte and the value structure.
-# Word alignment of small fields.
-# struct IDL_VARIABLE
-#     type::Cuchar
-#     flags::Cuchar
-#     flags2::Cuchar
-#     pad::NTuple{5, UInt8}
-#     value::IDL_ALLTYPES
-# end
+struct IDL_VARIABLE
+    data::NTuple{24, UInt8}
+end
 
 function Base.getproperty(x::Ptr{IDL_VARIABLE}, f::Symbol)
-    f === :type && return Ptr{Cuchar}(x + fieldoffset(IDL_VARIABLE, 1))
-    f === :flags && return Ptr{Cuchar}(x + fieldoffset(IDL_VARIABLE, 2))
-    f === :flags2 && return Ptr{Cuchar}(x + fieldoffset(IDL_VARIABLE, 3))
-    f === :value && return Ptr{IDL_ALLTYPES}(x + fieldoffset(IDL_VARIABLE, 4))
-    throw(UndefRefError())
+    f === :type && return Ptr{UCHAR}(x + 0)
+    f === :flags && return Ptr{UCHAR}(x + 1)
+    f === :flags2 && return Ptr{UCHAR}(x + 2)
+    f === :value && return Ptr{IDL_ALLTYPES}(x + 8)
+    return getfield(x, f)
 end
 
-Base.propertynames(::Ptr{IDL_VARIABLE}) = (:type, :flags, :value)
+function Base.getproperty(x::IDL_VARIABLE, f::Symbol)
+    r = Ref{IDL_VARIABLE}(x)
+    ptr = Base.unsafe_convert(Ptr{IDL_VARIABLE}, r)
+    fptr = getproperty(ptr, f)
+    GC.@preserve r unsafe_load(fptr)
+end
 
-## =-=-= ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+function Base.setproperty!(x::Ptr{IDL_VARIABLE}, f::Symbol, v)
+    unsafe_store!(getproperty(x, f), v)
+end
+
+function Base.propertynames(x::IDL_VARIABLE, private::Bool = false)
+    (:type, :flags, :flags2, :value, if private
+            fieldnames(typeof(x))
+        else
+            ()
+        end...)
+end
 
 const IDL_VPTR = Ptr{IDL_VARIABLE}
 
@@ -250,20 +258,34 @@ struct IDL_ARRAY
     data_guard::IDL_LONG64
 end
 
-# =-=-= CUSTOM ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Base.getproperty(x::Ptr{IDL_ARRAY}, f::Symbol) = begin
-    fieldid = findfirst(==(f), fieldnames(IDL_ARRAY))
-    isnothing(fieldid) && error("IDL_ARRAY does not have the field $f")
-    Ptr{fieldtype(IDL_ARRAY, f)}(x + fieldoffset(IDL_ARRAY, fieldid))
+struct _idl_tagdef
+    data::NTuple{40, UInt8}
 end
 
-## =-=-= ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+function Base.getproperty(x::Ptr{_idl_tagdef}, f::Symbol)
+    f === :id && return Ptr{Ptr{IDL_IDENT}}(x + 0)
+    f === :offset && return Ptr{IDL_LONG64}(x + 8)
+    f === :var && return Ptr{IDL_VARIABLE}(x + 16)
+    return getfield(x, f)
+end
 
-struct _idl_tagdef
-    id::Ptr{IDL_IDENT}
-    offset::IDL_LONG64
-    var::IDL_VARIABLE
+function Base.getproperty(x::_idl_tagdef, f::Symbol)
+    r = Ref{_idl_tagdef}(x)
+    ptr = Base.unsafe_convert(Ptr{_idl_tagdef}, r)
+    fptr = getproperty(ptr, f)
+    GC.@preserve r unsafe_load(fptr)
+end
+
+function Base.setproperty!(x::Ptr{_idl_tagdef}, f::Symbol, v)
+    unsafe_store!(getproperty(x, f), v)
+end
+
+function Base.propertynames(x::_idl_tagdef, private::Bool = false)
+    (:id, :offset, :var, if private
+            fieldnames(typeof(x))
+        else
+            ()
+        end...)
 end
 
 const IDL_TAGDEF = _idl_tagdef
@@ -300,7 +322,7 @@ function Base.getproperty(x::Ptr{IDL_SYSRTN_UNION}, f::Symbol)
     f === :generic && return Ptr{IDL_SYSRTN_GENERIC}(x + 0)
     f === :pro && return Ptr{IDL_SYSRTN_PRO}(x + 0)
     f === :fun && return Ptr{IDL_SYSRTN_FUN}(x + 0)
-    throw(UndefRefError())
+    return getfield(x, f)
 end
 
 function Base.getproperty(x::IDL_SYSRTN_UNION, f::Symbol)
@@ -314,16 +336,48 @@ function Base.setproperty!(x::Ptr{IDL_SYSRTN_UNION}, f::Symbol, v)
     unsafe_store!(getproperty(x, f), v)
 end
 
+function Base.propertynames(x::IDL_SYSRTN_UNION, private::Bool = false)
+    (:generic, :pro, :fun, if private
+            fieldnames(typeof(x))
+        else
+            ()
+        end...)
+end
+
 # typedef void ( * IDL_PRO_PTR ) ( )
 const IDL_PRO_PTR = Ptr{Cvoid}
 
 struct IDL_SYSFUN_DEF2
-    funct_addr::IDL_SYSRTN_UNION
-    name::Ptr{Cchar}
-    arg_min::Cushort
-    arg_max::Cushort
-    flags::Cint
-    extra::Ptr{Cvoid}
+    data::NTuple{32, UInt8}
+end
+
+function Base.getproperty(x::Ptr{IDL_SYSFUN_DEF2}, f::Symbol)
+    f === :funct_addr && return Ptr{IDL_SYSRTN_UNION}(x + 0)
+    f === :name && return Ptr{Ptr{Cchar}}(x + 8)
+    f === :arg_min && return Ptr{Cushort}(x + 16)
+    f === :arg_max && return Ptr{Cushort}(x + 18)
+    f === :flags && return Ptr{Cint}(x + 20)
+    f === :extra && return Ptr{Ptr{Cvoid}}(x + 24)
+    return getfield(x, f)
+end
+
+function Base.getproperty(x::IDL_SYSFUN_DEF2, f::Symbol)
+    r = Ref{IDL_SYSFUN_DEF2}(x)
+    ptr = Base.unsafe_convert(Ptr{IDL_SYSFUN_DEF2}, r)
+    fptr = getproperty(ptr, f)
+    GC.@preserve r unsafe_load(fptr)
+end
+
+function Base.setproperty!(x::Ptr{IDL_SYSFUN_DEF2}, f::Symbol, v)
+    unsafe_store!(getproperty(x, f), v)
+end
+
+function Base.propertynames(x::IDL_SYSFUN_DEF2, private::Bool = false)
+    (:funct_addr, :name, :arg_min, :arg_max, :flags, :extra, if private
+            fieldnames(typeof(x))
+        else
+            ()
+        end...)
 end
 
 const IDL_StructDefPtr = Ptr{_idl_structure}
@@ -399,15 +453,39 @@ end
 const IDL_EXIT_HANDLER_FUNC = Ptr{Cvoid}
 
 struct IDL_EZ_ARG
-    allowed_dims::Cshort
-    allowed_types::Cint
-    access::Cshort
-    convert::Cshort
-    pre::Cshort
-    post::Cshort
-    to_delete::IDL_VPTR
-    uargv::IDL_VPTR
-    value::IDL_ALLTYPES
+    data::NTuple{48, UInt8}
+end
+
+function Base.getproperty(x::Ptr{IDL_EZ_ARG}, f::Symbol)
+    f === :allowed_dims && return Ptr{Cshort}(x + 0)
+    f === :allowed_types && return Ptr{Cint}(x + 4)
+    f === :access && return Ptr{Cshort}(x + 8)
+    f === :convert && return Ptr{Cshort}(x + 10)
+    f === :pre && return Ptr{Cshort}(x + 12)
+    f === :post && return Ptr{Cshort}(x + 14)
+    f === :to_delete && return Ptr{IDL_VPTR}(x + 16)
+    f === :uargv && return Ptr{IDL_VPTR}(x + 24)
+    f === :value && return Ptr{IDL_ALLTYPES}(x + 32)
+    return getfield(x, f)
+end
+
+function Base.getproperty(x::IDL_EZ_ARG, f::Symbol)
+    r = Ref{IDL_EZ_ARG}(x)
+    ptr = Base.unsafe_convert(Ptr{IDL_EZ_ARG}, r)
+    fptr = getproperty(ptr, f)
+    GC.@preserve r unsafe_load(fptr)
+end
+
+function Base.setproperty!(x::Ptr{IDL_EZ_ARG}, f::Symbol, v)
+    unsafe_store!(getproperty(x, f), v)
+end
+
+function Base.propertynames(x::IDL_EZ_ARG, private::Bool = false)
+    (:allowed_dims, :allowed_types, :access, :convert, :pre, :post, :to_delete, :uargv, :value, if private
+            fieldnames(typeof(x))
+        else
+            ()
+        end...)
 end
 
 struct IDL_AXIS
@@ -442,13 +520,13 @@ struct IDL_GR_PT
 end
 
 function Base.getproperty(x::Ptr{IDL_GR_PT}, f::Symbol)
-    f === :d && return Ptr{var"struct (unnamed at include/idl_export.h:1354:3)"}(x + 0)
-    f === :i && return Ptr{var"struct (unnamed at include/idl_export.h:1360:3)"}(x + 0)
-    f === :d_s && return Ptr{var"struct (unnamed at include/idl_export.h:1365:3)"}(x + 0)
+    f === :d && return Ptr{var"##Ctag#286"}(x + 0)
+    f === :i && return Ptr{var"##Ctag#287"}(x + 0)
+    f === :d_s && return Ptr{var"##Ctag#288"}(x + 0)
     f === :p && return Ptr{NTuple{4, Cfloat}}(x + 0)
     f === :d_arr && return Ptr{NTuple{4, Cdouble}}(x + 0)
-    f === :dev && return Ptr{var"struct (unnamed at include/idl_export.h:1378:3)"}(x + 0)
-    throw(UndefRefError())
+    f === :dev && return Ptr{var"##Ctag#289"}(x + 0)
+    return getfield(x, f)
 end
 
 function Base.getproperty(x::IDL_GR_PT, f::Symbol)
@@ -462,6 +540,14 @@ function Base.setproperty!(x::Ptr{IDL_GR_PT}, f::Symbol, v)
     unsafe_store!(getproperty(x, f), v)
 end
 
+function Base.propertynames(x::IDL_GR_PT, private::Bool = false)
+    (:d, :i, :d_s, :p, :d_arr, :dev, if private
+            fieldnames(typeof(x))
+        else
+            ()
+        end...)
+end
+
 @cenum IDL_GR_PT_TYPE_e::UInt32 begin
     IDL_GR_PT_UNKNOWN = 0
     IDL_GR_PT_INT_STRUCT = 1
@@ -473,14 +559,62 @@ end
 end
 
 struct IDL_GR_TYPED_PT
-    type::IDL_GR_PT_TYPE_e
-    coord::Cint
-    pt::IDL_GR_PT
+    data::NTuple{40, UInt8}
+end
+
+function Base.getproperty(x::Ptr{IDL_GR_TYPED_PT}, f::Symbol)
+    f === :type && return Ptr{IDL_GR_PT_TYPE_e}(x + 0)
+    f === :coord && return Ptr{Cint}(x + 4)
+    f === :pt && return Ptr{IDL_GR_PT}(x + 8)
+    return getfield(x, f)
+end
+
+function Base.getproperty(x::IDL_GR_TYPED_PT, f::Symbol)
+    r = Ref{IDL_GR_TYPED_PT}(x)
+    ptr = Base.unsafe_convert(Ptr{IDL_GR_TYPED_PT}, r)
+    fptr = getproperty(ptr, f)
+    GC.@preserve r unsafe_load(fptr)
+end
+
+function Base.setproperty!(x::Ptr{IDL_GR_TYPED_PT}, f::Symbol, v)
+    unsafe_store!(getproperty(x, f), v)
+end
+
+function Base.propertynames(x::IDL_GR_TYPED_PT, private::Bool = false)
+    (:type, :coord, :pt, if private
+            fieldnames(typeof(x))
+        else
+            ()
+        end...)
 end
 
 struct IDL_GR_BOX
-    origin::IDL_GR_PT
-    size::IDL_GR_PT
+    data::NTuple{64, UInt8}
+end
+
+function Base.getproperty(x::Ptr{IDL_GR_BOX}, f::Symbol)
+    f === :origin && return Ptr{IDL_GR_PT}(x + 0)
+    f === :size && return Ptr{IDL_GR_PT}(x + 32)
+    return getfield(x, f)
+end
+
+function Base.getproperty(x::IDL_GR_BOX, f::Symbol)
+    r = Ref{IDL_GR_BOX}(x)
+    ptr = Base.unsafe_convert(Ptr{IDL_GR_BOX}, r)
+    fptr = getproperty(ptr, f)
+    GC.@preserve r unsafe_load(fptr)
+end
+
+function Base.setproperty!(x::Ptr{IDL_GR_BOX}, f::Symbol, v)
+    unsafe_store!(getproperty(x, f), v)
+end
+
+function Base.propertynames(x::IDL_GR_BOX, private::Bool = false)
+    (:origin, :size, if private
+            fieldnames(typeof(x))
+        else
+            ()
+        end...)
 end
 
 struct IDL_ATTR_STRUCT
@@ -530,90 +664,122 @@ struct IDL_ROI_STATE
     iTopY::IDL_LONG64
 end
 
-struct var"union (unnamed at include/idl_export.h:1471:3)"
+struct var"##Ctag#280"
     data::NTuple{8, UInt8}
 end
 
-function Base.getproperty(x::Ptr{var"union (unnamed at include/idl_export.h:1471:3)"}, f::Symbol)
+function Base.getproperty(x::Ptr{var"##Ctag#280"}, f::Symbol)
     f === :draw && return Ptr{IDL_DEVCORE_FCN_DRAW}(x + 0)
     f === :rw_pixels && return Ptr{IDL_DEVCORE_FCN_RW_PIXELS}(x + 0)
-    throw(UndefRefError())
+    return getfield(x, f)
 end
 
-function Base.getproperty(x::var"union (unnamed at include/idl_export.h:1471:3)", f::Symbol)
-    r = Ref{var"union (unnamed at include/idl_export.h:1471:3)"}(x)
-    ptr = Base.unsafe_convert(Ptr{var"union (unnamed at include/idl_export.h:1471:3)"}, r)
+function Base.getproperty(x::var"##Ctag#280", f::Symbol)
+    r = Ref{var"##Ctag#280"}(x)
+    ptr = Base.unsafe_convert(Ptr{var"##Ctag#280"}, r)
     fptr = getproperty(ptr, f)
     GC.@preserve r unsafe_load(fptr)
 end
 
-function Base.setproperty!(x::Ptr{var"union (unnamed at include/idl_export.h:1471:3)"}, f::Symbol, v)
+function Base.setproperty!(x::Ptr{var"##Ctag#280"}, f::Symbol, v)
     unsafe_store!(getproperty(x, f), v)
 end
 
-struct var"union (unnamed at include/idl_export.h:1475:3)"
+function Base.propertynames(x::var"##Ctag#280", private::Bool = false)
+    (:draw, :rw_pixels, if private
+            fieldnames(typeof(x))
+        else
+            ()
+        end...)
+end
+
+struct var"##Ctag#281"
     data::NTuple{40, UInt8}
 end
 
-function Base.getproperty(x::Ptr{var"union (unnamed at include/idl_export.h:1475:3)"}, f::Symbol)
-    f === :image && return Ptr{var"struct (unnamed at include/idl_export.h:1476:5)"}(x + 0)
-    f === :lines && return Ptr{var"struct (unnamed at include/idl_export.h:1485:5)"}(x + 0)
+function Base.getproperty(x::Ptr{var"##Ctag#281"}, f::Symbol)
+    f === :image && return Ptr{var"##Ctag#282"}(x + 0)
+    f === :lines && return Ptr{var"##Ctag#283"}(x + 0)
     f === :fill_style && return Ptr{Cint}(x + 0)
-    throw(UndefRefError())
+    return getfield(x, f)
 end
 
-function Base.getproperty(x::var"union (unnamed at include/idl_export.h:1475:3)", f::Symbol)
-    r = Ref{var"union (unnamed at include/idl_export.h:1475:3)"}(x)
-    ptr = Base.unsafe_convert(Ptr{var"union (unnamed at include/idl_export.h:1475:3)"}, r)
+function Base.getproperty(x::var"##Ctag#281", f::Symbol)
+    r = Ref{var"##Ctag#281"}(x)
+    ptr = Base.unsafe_convert(Ptr{var"##Ctag#281"}, r)
     fptr = getproperty(ptr, f)
     GC.@preserve r unsafe_load(fptr)
 end
 
-function Base.setproperty!(x::Ptr{var"union (unnamed at include/idl_export.h:1475:3)"}, f::Symbol, v)
+function Base.setproperty!(x::Ptr{var"##Ctag#281"}, f::Symbol, v)
     unsafe_store!(getproperty(x, f), v)
 end
 
-struct var"union (unnamed at include/idl_export.h:1494:5)"
+function Base.propertynames(x::var"##Ctag#281", private::Bool = false)
+    (:image, :lines, :fill_style, if private
+            fieldnames(typeof(x))
+        else
+            ()
+        end...)
+end
+
+struct var"##Ctag#285"
     data::NTuple{8, UInt8}
 end
 
-function Base.getproperty(x::Ptr{var"union (unnamed at include/idl_export.h:1494:5)"}, f::Symbol)
+function Base.getproperty(x::Ptr{var"##Ctag#285"}, f::Symbol)
     f === :f && return Ptr{Ptr{Cfloat}}(x + 0)
     f === :d && return Ptr{Ptr{Cdouble}}(x + 0)
-    throw(UndefRefError())
+    return getfield(x, f)
 end
 
-function Base.getproperty(x::var"union (unnamed at include/idl_export.h:1494:5)", f::Symbol)
-    r = Ref{var"union (unnamed at include/idl_export.h:1494:5)"}(x)
-    ptr = Base.unsafe_convert(Ptr{var"union (unnamed at include/idl_export.h:1494:5)"}, r)
+function Base.getproperty(x::var"##Ctag#285", f::Symbol)
+    r = Ref{var"##Ctag#285"}(x)
+    ptr = Base.unsafe_convert(Ptr{var"##Ctag#285"}, r)
     fptr = getproperty(ptr, f)
     GC.@preserve r unsafe_load(fptr)
 end
 
-function Base.setproperty!(x::Ptr{var"union (unnamed at include/idl_export.h:1494:5)"}, f::Symbol, v)
+function Base.setproperty!(x::Ptr{var"##Ctag#285"}, f::Symbol, v)
     unsafe_store!(getproperty(x, f), v)
 end
 
-struct var"struct (unnamed at include/idl_export.h:1493:3)"
+function Base.propertynames(x::var"##Ctag#285", private::Bool = false)
+    (:f, :d, if private
+            fieldnames(typeof(x))
+        else
+            ()
+        end...)
+end
+
+struct var"##Ctag#284"
     data::NTuple{24, UInt8}
 end
 
-function Base.getproperty(x::Ptr{var"struct (unnamed at include/idl_export.h:1493:3)"}, f::Symbol)
-    f === :z && return Ptr{var"union (unnamed at include/idl_export.h:1494:5)"}(x + 0)
+function Base.getproperty(x::Ptr{var"##Ctag#284"}, f::Symbol)
+    f === :z && return Ptr{var"##Ctag#285"}(x + 0)
     f === :precision && return Ptr{Cint}(x + 8)
     f === :shades && return Ptr{Ptr{Cint}}(x + 16)
-    throw(UndefRefError())
+    return getfield(x, f)
 end
 
-function Base.getproperty(x::var"struct (unnamed at include/idl_export.h:1493:3)", f::Symbol)
-    r = Ref{var"struct (unnamed at include/idl_export.h:1493:3)"}(x)
-    ptr = Base.unsafe_convert(Ptr{var"struct (unnamed at include/idl_export.h:1493:3)"}, r)
+function Base.getproperty(x::var"##Ctag#284", f::Symbol)
+    r = Ref{var"##Ctag#284"}(x)
+    ptr = Base.unsafe_convert(Ptr{var"##Ctag#284"}, r)
     fptr = getproperty(ptr, f)
     GC.@preserve r unsafe_load(fptr)
 end
 
-function Base.setproperty!(x::Ptr{var"struct (unnamed at include/idl_export.h:1493:3)"}, f::Symbol, v)
+function Base.setproperty!(x::Ptr{var"##Ctag#284"}, f::Symbol, v)
     unsafe_store!(getproperty(x, f), v)
+end
+
+function Base.propertynames(x::var"##Ctag#284", private::Bool = false)
+    (:z, :precision, :shades, if private
+            fieldnames(typeof(x))
+        else
+            ()
+        end...)
 end
 
 struct IDL_POLYFILL_ATTR
@@ -623,11 +789,11 @@ end
 function Base.getproperty(x::Ptr{IDL_POLYFILL_ATTR}, f::Symbol)
     f === :fill_type && return Ptr{Cvoid}(x + 0)
     f === :attr && return Ptr{Ptr{IDL_ATTR_STRUCT}}(x + 8)
-    f === :rtn && return Ptr{var"union (unnamed at include/idl_export.h:1471:3)"}(x + 16)
-    f === :extra && return Ptr{var"union (unnamed at include/idl_export.h:1475:3)"}(x + 24)
-    f === :three && return Ptr{var"struct (unnamed at include/idl_export.h:1493:3)"}(x + 64)
+    f === :rtn && return Ptr{var"##Ctag#280"}(x + 16)
+    f === :extra && return Ptr{var"##Ctag#281"}(x + 24)
+    f === :three && return Ptr{Cvoid}(x + 64)
     f === :pROIState && return Ptr{Ptr{IDL_ROI_STATE}}(x + 88)
-    throw(UndefRefError())
+    return getfield(x, f)
 end
 
 function Base.getproperty(x::IDL_POLYFILL_ATTR, f::Symbol)
@@ -639,6 +805,14 @@ end
 
 function Base.setproperty!(x::Ptr{IDL_POLYFILL_ATTR}, f::Symbol, v)
     unsafe_store!(getproperty(x, f), v)
+end
+
+function Base.propertynames(x::IDL_POLYFILL_ATTR, private::Bool = false)
+    (:fill_type, :attr, :rtn, :extra, :three, :pROIState, if private
+            fieldnames(typeof(x))
+        else
+            ()
+        end...)
 end
 
 # typedef int ( * IDL_DEVCORE_FCN_TEXT ) ( IDL_GR_PT * p , IDL_ATTR_STRUCT * ga , IDL_TEXT_STRUCT * ta , char * text )
@@ -806,11 +980,35 @@ struct IDL_POUT_CNTRL
 end
 
 struct idl_heap_variable
-    hash::Ptr{idl_heap_variable}
-    hash_id::IDL_HVID
-    refcount::IDL_LONG
-    flags::Cint
-    var::IDL_VARIABLE
+    data::NTuple{48, UInt8}
+end
+
+function Base.getproperty(x::Ptr{idl_heap_variable}, f::Symbol)
+    f === :hash && return Ptr{Ptr{idl_heap_variable}}(x + 0)
+    f === :hash_id && return Ptr{IDL_HVID}(x + 8)
+    f === :refcount && return Ptr{IDL_LONG}(x + 12)
+    f === :flags && return Ptr{Cint}(x + 16)
+    f === :var && return Ptr{IDL_VARIABLE}(x + 24)
+    return getfield(x, f)
+end
+
+function Base.getproperty(x::idl_heap_variable, f::Symbol)
+    r = Ref{idl_heap_variable}(x)
+    ptr = Base.unsafe_convert(Ptr{idl_heap_variable}, r)
+    fptr = getproperty(ptr, f)
+    GC.@preserve r unsafe_load(fptr)
+end
+
+function Base.setproperty!(x::Ptr{idl_heap_variable}, f::Symbol, v)
+    unsafe_store!(getproperty(x, f), v)
+end
+
+function Base.propertynames(x::idl_heap_variable, private::Bool = false)
+    (:hash, :hash_id, :refcount, :flags, :var, if private
+            fieldnames(typeof(x))
+        else
+            ()
+        end...)
 end
 
 const IDL_HEAP_VARIABLE = idl_heap_variable
@@ -865,16 +1063,51 @@ const IDL_TOUT_OUTF = Ptr{Cvoid}
 
 const IDL_INIT_DATA_OPTIONS_T = Cint
 
-struct var"struct (unnamed at include/idl_export.h:2375:3)"
+struct var"##Ctag#278"
     argc::Cint
     argv::Ptr{Ptr{Cchar}}
 end
+function Base.getproperty(x::Ptr{var"##Ctag#278"}, f::Symbol)
+    f === :argc && return Ptr{Cint}(x + 0)
+    f === :argv && return Ptr{Ptr{Ptr{Cchar}}}(x + 8)
+    return getfield(x, f)
+end
 
-struct var"struct (unnamed at include/idl_export.h:2390:3)"
+function Base.getproperty(x::var"##Ctag#278", f::Symbol)
+    r = Ref{var"##Ctag#278"}(x)
+    ptr = Base.unsafe_convert(Ptr{var"##Ctag#278"}, r)
+    fptr = getproperty(ptr, f)
+    GC.@preserve r unsafe_load(fptr)
+end
+
+function Base.setproperty!(x::Ptr{var"##Ctag#278"}, f::Symbol, v)
+    unsafe_store!(getproperty(x, f), v)
+end
+
+
+struct var"##Ctag#279"
     id::Ptr{Cchar}
     data::Ptr{Cuchar}
     length::Cint
 end
+function Base.getproperty(x::Ptr{var"##Ctag#279"}, f::Symbol)
+    f === :id && return Ptr{Ptr{Cchar}}(x + 0)
+    f === :data && return Ptr{Ptr{Cuchar}}(x + 8)
+    f === :length && return Ptr{Cint}(x + 16)
+    return getfield(x, f)
+end
+
+function Base.getproperty(x::var"##Ctag#279", f::Symbol)
+    r = Ref{var"##Ctag#279"}(x)
+    ptr = Base.unsafe_convert(Ptr{var"##Ctag#279"}, r)
+    fptr = getproperty(ptr, f)
+    GC.@preserve r unsafe_load(fptr)
+end
+
+function Base.setproperty!(x::Ptr{var"##Ctag#279"}, f::Symbol, v)
+    unsafe_store!(getproperty(x, f), v)
+end
+
 
 struct IDL_INIT_DATA
     data::NTuple{56, UInt8}
@@ -882,11 +1115,10 @@ end
 
 function Base.getproperty(x::Ptr{IDL_INIT_DATA}, f::Symbol)
     f === :options && return Ptr{IDL_INIT_DATA_OPTIONS_T}(x + 0)
-    f === :clargs && return Ptr{var"struct (unnamed at include/idl_export.h:2375:3)"}(x + 8)
+    f === :clargs && return Ptr{var"##Ctag#278"}(x + 8)
     f === :hwnd && return Ptr{Ptr{Cvoid}}(x + 24)
-    f === :bufferlicense && return Ptr{var"struct (unnamed at include/idl_export.h:2390:3)"}(x + 32)
-
-    throw(UndefRefError())
+    f === :bufferlicense && return Ptr{var"##Ctag#279"}(x + 32)
+    return getfield(x, f)
 end
 
 function Base.getproperty(x::IDL_INIT_DATA, f::Symbol)
@@ -898,6 +1130,14 @@ end
 
 function Base.setproperty!(x::Ptr{IDL_INIT_DATA}, f::Symbol, v)
     unsafe_store!(getproperty(x, f), v)
+end
+
+function Base.propertynames(x::IDL_INIT_DATA, private::Bool = false)
+    (:options, :clargs, :hwnd, :bufferlicense, if private
+            fieldnames(typeof(x))
+        else
+            ()
+        end...)
 end
 
 # typedef void ( * IDL_WIDGET_STUB_SET_SIZE_FUNC ) ( IDL_ULONG id , int width , int height )
@@ -1912,7 +2152,7 @@ function IDL_HlsToRgb(h, l, s, r, g, b, n)
     ccall((:IDL_HlsToRgb, libidl), Cvoid, (Ptr{Cfloat}, Ptr{Cfloat}, Ptr{Cfloat}, Ptr{UCHAR}, Ptr{UCHAR}, Ptr{UCHAR}, Cint), h, l, s, r, g, b, n)
 end
 
-struct var"struct (unnamed at include/idl_export.h:1476:5)"
+struct var"##Ctag#282"
     data::Ptr{UCHAR}
     d1::Cint
     d2::Cint
@@ -1922,39 +2162,155 @@ struct var"struct (unnamed at include/idl_export.h:1476:5)"
     transparent::UCHAR
     im_depth::UCHAR
 end
+function Base.getproperty(x::Ptr{var"##Ctag#282"}, f::Symbol)
+    f === :data && return Ptr{Ptr{UCHAR}}(x + 0)
+    f === :d1 && return Ptr{Cint}(x + 8)
+    f === :d2 && return Ptr{Cint}(x + 12)
+    f === :im_verts && return Ptr{Ptr{Cfloat}}(x + 16)
+    f === :im_w && return Ptr{Ptr{Cfloat}}(x + 24)
+    f === :interp && return Ptr{UCHAR}(x + 32)
+    f === :transparent && return Ptr{UCHAR}(x + 33)
+    f === :im_depth && return Ptr{UCHAR}(x + 34)
+    return getfield(x, f)
+end
 
-struct var"struct (unnamed at include/idl_export.h:1485:5)"
+function Base.getproperty(x::var"##Ctag#282", f::Symbol)
+    r = Ref{var"##Ctag#282"}(x)
+    ptr = Base.unsafe_convert(Ptr{var"##Ctag#282"}, r)
+    fptr = getproperty(ptr, f)
+    GC.@preserve r unsafe_load(fptr)
+end
+
+function Base.setproperty!(x::Ptr{var"##Ctag#282"}, f::Symbol, v)
+    unsafe_store!(getproperty(x, f), v)
+end
+
+
+struct var"##Ctag#283"
     angle::Cfloat
     spacing::Cint
     ct::Cfloat
     st::Cfloat
 end
+function Base.getproperty(x::Ptr{var"##Ctag#283"}, f::Symbol)
+    f === :angle && return Ptr{Cfloat}(x + 0)
+    f === :spacing && return Ptr{Cint}(x + 4)
+    f === :ct && return Ptr{Cfloat}(x + 8)
+    f === :st && return Ptr{Cfloat}(x + 12)
+    return getfield(x, f)
+end
 
-struct var"struct (unnamed at include/idl_export.h:1354:3)"
+function Base.getproperty(x::var"##Ctag#283", f::Symbol)
+    r = Ref{var"##Ctag#283"}(x)
+    ptr = Base.unsafe_convert(Ptr{var"##Ctag#283"}, r)
+    fptr = getproperty(ptr, f)
+    GC.@preserve r unsafe_load(fptr)
+end
+
+function Base.setproperty!(x::Ptr{var"##Ctag#283"}, f::Symbol, v)
+    unsafe_store!(getproperty(x, f), v)
+end
+
+
+struct var"##Ctag#286"
     x::Cfloat
     y::Cfloat
     z::Cfloat
     h::Cfloat
 end
+function Base.getproperty(x::Ptr{var"##Ctag#286"}, f::Symbol)
+    f === :x && return Ptr{Cfloat}(x + 0)
+    f === :y && return Ptr{Cfloat}(x + 4)
+    f === :z && return Ptr{Cfloat}(x + 8)
+    f === :h && return Ptr{Cfloat}(x + 12)
+    return getfield(x, f)
+end
 
-struct var"struct (unnamed at include/idl_export.h:1360:3)"
+function Base.getproperty(x::var"##Ctag#286", f::Symbol)
+    r = Ref{var"##Ctag#286"}(x)
+    ptr = Base.unsafe_convert(Ptr{var"##Ctag#286"}, r)
+    fptr = getproperty(ptr, f)
+    GC.@preserve r unsafe_load(fptr)
+end
+
+function Base.setproperty!(x::Ptr{var"##Ctag#286"}, f::Symbol, v)
+    unsafe_store!(getproperty(x, f), v)
+end
+
+
+struct var"##Ctag#287"
     x::Cint
     y::Cint
 end
+function Base.getproperty(x::Ptr{var"##Ctag#287"}, f::Symbol)
+    f === :x && return Ptr{Cint}(x + 0)
+    f === :y && return Ptr{Cint}(x + 4)
+    return getfield(x, f)
+end
 
-struct var"struct (unnamed at include/idl_export.h:1365:3)"
+function Base.getproperty(x::var"##Ctag#287", f::Symbol)
+    r = Ref{var"##Ctag#287"}(x)
+    ptr = Base.unsafe_convert(Ptr{var"##Ctag#287"}, r)
+    fptr = getproperty(ptr, f)
+    GC.@preserve r unsafe_load(fptr)
+end
+
+function Base.setproperty!(x::Ptr{var"##Ctag#287"}, f::Symbol, v)
+    unsafe_store!(getproperty(x, f), v)
+end
+
+
+struct var"##Ctag#288"
     x::Cdouble
     y::Cdouble
     z::Cdouble
     h::Cdouble
 end
+function Base.getproperty(x::Ptr{var"##Ctag#288"}, f::Symbol)
+    f === :x && return Ptr{Cdouble}(x + 0)
+    f === :y && return Ptr{Cdouble}(x + 8)
+    f === :z && return Ptr{Cdouble}(x + 16)
+    f === :h && return Ptr{Cdouble}(x + 24)
+    return getfield(x, f)
+end
 
-struct var"struct (unnamed at include/idl_export.h:1378:3)"
+function Base.getproperty(x::var"##Ctag#288", f::Symbol)
+    r = Ref{var"##Ctag#288"}(x)
+    ptr = Base.unsafe_convert(Ptr{var"##Ctag#288"}, r)
+    fptr = getproperty(ptr, f)
+    GC.@preserve r unsafe_load(fptr)
+end
+
+function Base.setproperty!(x::Ptr{var"##Ctag#288"}, f::Symbol, v)
+    unsafe_store!(getproperty(x, f), v)
+end
+
+
+struct var"##Ctag#289"
     x::Cint
     y::Cint
     z::Cfloat
     h::Cfloat
 end
+function Base.getproperty(x::Ptr{var"##Ctag#289"}, f::Symbol)
+    f === :x && return Ptr{Cint}(x + 0)
+    f === :y && return Ptr{Cint}(x + 4)
+    f === :z && return Ptr{Cfloat}(x + 8)
+    f === :h && return Ptr{Cfloat}(x + 12)
+    return getfield(x, f)
+end
+
+function Base.getproperty(x::var"##Ctag#289", f::Symbol)
+    r = Ref{var"##Ctag#289"}(x)
+    ptr = Base.unsafe_convert(Ptr{var"##Ctag#289"}, r)
+    fptr = getproperty(ptr, f)
+    GC.@preserve r unsafe_load(fptr)
+end
+
+function Base.setproperty!(x::Ptr{var"##Ctag#289"}, f::Symbol, v)
+    unsafe_store!(getproperty(x, f), v)
+end
+
 
 const IDL_M_GENERIC = -1
 
@@ -1973,8 +2329,6 @@ const IDL_DEBUGGING = 1
 const FALSE = 0
 
 const TRUE = 1
-
-# const IDL_STDCALL = __stdcall
 
 # Skipping MacroDefinition: IDL_CDECL __cdecl
 
@@ -2132,17 +2486,13 @@ const IDL_VERSION_SUB = 0
 
 const IDL_REVISION = 452795
 
-const IDL_MAJOR_STRING = string(IDL_VERSION_MAJOR)
+const IDL_MAJOR_STRING = IDL_STRINGIFY(IDL_VERSION_MAJOR)
 
-const IDL_MINOR_STRING = string(IDL_VERSION_MINOR)
+const IDL_MINOR_STRING = IDL_STRINGIFY(IDL_VERSION_MINOR)
 
-const IDL_SUBMINOR_STRING = string(IDL_VERSION_SUB)
+const IDL_SUBMINOR_STRING = IDL_STRINGIFY(IDL_VERSION_SUB)
 
-const IDL_VERSION_STRING = "$IDL_MAJOR_STRING.$IDL_MINOR_STRING.$IDL_SUBMINOR_STRING"
-
-const IDL_VERSION_STRING_NOSUBMINOR = "$IDL_MAJOR_STRING.$IDL_MINOR_STRING"
-
-const IDL_REVISION_STRING = string(IDL_REVISION)
+const IDL_REVISION_STRING = IDL_STRINGIFY(IDL_REVISION)
 
 const IDL_ARR_INI_ZERO = 0
 
@@ -2165,10 +2515,6 @@ const IDL_EZ_ACCESS_R = 1
 const IDL_EZ_ACCESS_W = 2
 
 const IDL_EZ_ACCESS_RW = 3
-
-# manual substitution for the macro
-# #define IDL_TYP_MASK(type_code)      (1 << type_code)
-const IDL_EZ_TYP_NUMERIC = ((((((((((1 << IDL_TYP_INT) | (1 << IDL_TYP_LONG)) | (1 << IDL_TYP_FLOAT)) | (1 << IDL_TYP_DOUBLE)) | (1 << IDL_TYP_COMPLEX)) | (1 << IDL_TYP_BYTE)) | (1 << IDL_TYP_DCOMPLEX)) | (1 << IDL_TYP_UINT)) | (1 << IDL_TYP_ULONG)) | (1 << IDL_TYP_LONG64)) | (1 << IDL_TYP_ULONG64)
 
 const IDL_EZ_DIM_ARRAY = 510
 
@@ -2322,8 +2668,6 @@ const IDL_KW_MARK = 1
 
 const IDL_KW_CLEAN = 2
 
-# const IDL_KW_RESULT_FIRST_FIELD = Cint(_idl_kw_free)
-
 # Skipping MacroDefinition: IDL_KW_FREE if ( kw . _idl_kw_free ) IDL_KWFree ( )
 
 const IDL_LMGR_CLIENTSERVER = 0x01
@@ -2381,10 +2725,6 @@ const IDL_DITHER_ORDERED = 3
 const IDL_DITHER_F_WHITE = 0x01
 
 const IDL_RASTER_1BYTEPP = 0x02
-
-const IDL_RASTER_MSB_LEFT = [0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01]
-
-const IDL_RASTER_MSB_RIGHT = [0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80]
 
 const IDL_RLINE_OPT_NOSAVE = 1
 
@@ -2582,28 +2922,31 @@ const IDL_EFS_SOCKET_LISTEN = 1 << 14
 
 const IDL_FCU_FREELUN = 2
 
-# const strcasecmp = _stricmp
+const IDL_VERSION_STRING = "$IDL_MAJOR_STRING.$IDL_MINOR_STRING.$IDL_SUBMINOR_STRING"
 
-# const strncasecmp = _strnicmp
+const IDL_VERSION_STRING_NOSUBMINOR = "$IDL_MAJOR_STRING.$IDL_MINOR_STRING"
 
-# const wstrcasecmp = _wcsicmp
+const IDL_EZ_TYP_NUMERIC = ((((((((((1 << IDL_TYP_INT) | (1 << IDL_TYP_LONG)) | (1 << IDL_TYP_FLOAT)) | (1 << IDL_TYP_DOUBLE)) | (1 << IDL_TYP_COMPLEX)) | (1 << IDL_TYP_BYTE)) | (1 << IDL_TYP_DCOMPLEX)) | (1 << IDL_TYP_UINT)) | (1 << IDL_TYP_ULONG)) | (1 << IDL_TYP_LONG64)) | (1 << IDL_TYP_ULONG64)
 
-# const wstrncasecmp = _wcsnicmp
+const IDL_RASTER_MSB_LEFT = [0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01]
 
-# const snwprintf = _snwprintf
+const IDL_RASTER_MSB_RIGHT = [0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80]
 
-# const vsnprintf = _vsnprintf
+# accessor to get the property from an array pointer directly
+Base.getproperty(x::Ptr{IDL_ARRAY}, f::Symbol) = begin
+    fieldid = findfirst(==(f), fieldnames(IDL_ARRAY))
+    isnothing(fieldid) && error("IDL_ARRAY does not have the field $f")
+    Ptr{fieldtype(IDL_ARRAY, f)}(x + fieldoffset(IDL_ARRAY, fieldid))
+end
 
-# const strlcpy = IDL_StrBase_strlcpy
+IDL_INIT_DATA(init_options::Int64) = IDL_INIT_DATA(convert(IDL_INIT_DATA_OPTIONS_T, init_options))
+function IDL_INIT_DATA(init_options::IDL_INIT_DATA_OPTIONS_T)
+    ref = Ref{IDL_INIT_DATA}()
+    GC.@preserve ref begin
+        x = Base.unsafe_convert(Ptr{IDL_INIT_DATA}, ref)
+        x.options = init_options
+        ref[]
+    end
+end
 
-# const strlcat = IDL_StrBase_strlcat
 
-# const strlcatW = IDL_StrBase_strlcatW
-
-# const strbcopy = IDL_StrBase_strbcopy
-
-# const strbcopyW = IDL_StrBase_strbcopyW
-
-# const strcasestr = IDL_StrBase_strcasestr
-
-# end # module

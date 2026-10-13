@@ -6,16 +6,16 @@ IDL_STRINGIFY(s) = IDL_STRINGIFY2(s)
 
 
 
-const IDL_LONG64 = Clonglong
+const IDL_LONG = Clong
 
-const IDL_ULONG64 = Culonglong
+const IDL_ULONG = Culong
+
+const IDL_LONG64 = Clonglong
 
 # typedef IDL_VARIABLE * ( * IDL_SYSRTN_GENERIC ) ( )
 const IDL_SYSRTN_GENERIC = Ptr{Cvoid}
 
 const UCHAR = Cuchar
-
-const IDL_LONG = Clong
 
 struct IDL_ALLTYPES
     data::NTuple{16, UInt8}
@@ -38,7 +38,7 @@ function Base.getproperty(x::Ptr{IDL_ALLTYPES}, f::Symbol)
     f === :arr && return Ptr{Ptr{IDL_ARRAY}}(x + 0)
     f === :s && return Ptr{IDL_SREF}(x + 0)
     f === :hvid && return Ptr{IDL_HVID}(x + 0)
-    f === :memint && return Ptr{IDL_LONG64}(x + 0)
+    f === :memint && return Ptr{IDL_LONG}(x + 0)
     f === :fileint && return Ptr{IDL_LONG64}(x + 0)
     f === :ptrint && return Ptr{IDL_PTRINT}(x + 0)
     return getfield(x, f)
@@ -132,10 +132,6 @@ function IDL_MessageVE_NOSCALAR(var, action)
     ccall((:IDL_MessageVE_NOSCALAR, libidl), Cvoid, (IDL_VPTR, Cint), var, action)
 end
 
-function IDL_MessageVE_NOMEMINT64(var, action)
-    ccall((:IDL_MessageVE_NOMEMINT64, libidl), Cvoid, (IDL_VPTR, Cint), var, action)
-end
-
 function IDL_MessageVE_NOTARRAY(var, action)
     ccall((:IDL_MessageVE_NOTARRAY, libidl), Cvoid, (IDL_VPTR, Cint), var, action)
 end
@@ -168,7 +164,7 @@ function IDL_Delvar(var)
     ccall((:IDL_Delvar, libidl), Cvoid, (IDL_VPTR,), var)
 end
 
-const IDL_PTRINT = Clonglong
+const IDL_PTRINT = Clong
 
 function IDL_KWFree()
     ccall((:IDL_KWFree, libidl), Cvoid, ())
@@ -209,7 +205,7 @@ const IDL_INT = Cshort
 
 const IDL_UINT = Cushort
 
-const IDL_ULONG = Culong
+const IDL_ULONG64 = Culonglong
 
 const IDL_HVID = IDL_ULONG
 
@@ -242,12 +238,12 @@ const IDL_IDENT = _idl_ident
 # typedef void ( * IDL_ARRAY_FREE_CB ) ( UCHAR * data )
 const IDL_ARRAY_FREE_CB = Ptr{Cvoid}
 
-const IDL_ARRAY_DIM = NTuple{8, IDL_LONG64}
+const IDL_ARRAY_DIM = NTuple{8, IDL_LONG}
 
 struct IDL_ARRAY
-    elt_len::IDL_LONG64
-    arr_len::IDL_LONG64
-    n_elts::IDL_LONG64
+    elt_len::IDL_LONG
+    arr_len::IDL_LONG
+    n_elts::IDL_LONG
     data::Ptr{UCHAR}
     n_dim::UCHAR
     flags::UCHAR
@@ -255,7 +251,7 @@ struct IDL_ARRAY
     dim::IDL_ARRAY_DIM
     free_cb::IDL_ARRAY_FREE_CB
     offset::IDL_LONG64
-    data_guard::IDL_LONG64
+    data_guard::IDL_LONG
 end
 
 struct _idl_tagdef
@@ -264,7 +260,7 @@ end
 
 function Base.getproperty(x::Ptr{_idl_tagdef}, f::Symbol)
     f === :id && return Ptr{Ptr{IDL_IDENT}}(x + 0)
-    f === :offset && return Ptr{IDL_LONG64}(x + 8)
+    f === :offset && return Ptr{IDL_LONG}(x + 8)
     f === :var && return Ptr{IDL_VARIABLE}(x + 16)
     return getfield(x, f)
 end
@@ -295,8 +291,8 @@ struct _idl_structure
     flags::UCHAR
     contains_string::UCHAR
     ntags::Cint
-    length::IDL_LONG64
-    data_length::IDL_LONG64
+    length::IDL_LONG
+    data_length::IDL_LONG
     rcount::Cint
     object::Ptr{Cvoid}
     tag_array_mem::Ptr{IDL_ARRAY}
@@ -387,8 +383,6 @@ const IDL_STRUCTURE = _idl_structure
 @cenum IDL_MSG_SYSCODE_T::UInt32 begin
     IDL_MSG_SYSCODE_NONE = 0
     IDL_MSG_SYSCODE_ERRNO = 1
-    IDL_MSG_SYSCODE_WIN = 2
-    IDL_MSG_SYSCODE_WINSOCK = 3
 end
 
 struct IDL_MSG_DEF
@@ -416,8 +410,8 @@ struct IDL_CPU_STRUCT
     vector_enable::IDL_LONG
     hw_ncpu::IDL_LONG
     tpool_nthreads::IDL_LONG
-    tpool_min_elts::IDL_LONG64
-    tpool_max_elts::IDL_LONG64
+    tpool_min_elts::IDL_LONG
+    tpool_max_elts::IDL_LONG
 end
 
 struct IDL_SYS_ERROR_STATE
@@ -520,12 +514,12 @@ struct IDL_GR_PT
 end
 
 function Base.getproperty(x::Ptr{IDL_GR_PT}, f::Symbol)
-    f === :d && return Ptr{var"##Ctag#286"}(x + 0)
-    f === :i && return Ptr{var"##Ctag#287"}(x + 0)
-    f === :d_s && return Ptr{var"##Ctag#288"}(x + 0)
+    f === :d && return Ptr{var"##Ctag#151"}(x + 0)
+    f === :i && return Ptr{var"##Ctag#152"}(x + 0)
+    f === :d_s && return Ptr{var"##Ctag#153"}(x + 0)
     f === :p && return Ptr{NTuple{4, Cfloat}}(x + 0)
     f === :d_arr && return Ptr{NTuple{4, Cdouble}}(x + 0)
-    f === :dev && return Ptr{var"##Ctag#289"}(x + 0)
+    f === :dev && return Ptr{var"##Ctag#154"}(x + 0)
     return getfield(x, f)
 end
 
@@ -660,32 +654,32 @@ struct IDL_ROI_STATE
     iNAllocEdgeLists::IDL_LONG
     iNUsedEdgeLists::IDL_LONG
     ppEdgeLists::Ptr{Ptr{UCHAR}}
-    iBottomY::IDL_LONG64
-    iTopY::IDL_LONG64
+    iBottomY::IDL_LONG
+    iTopY::IDL_LONG
 end
 
-struct var"##Ctag#280"
+struct var"##Ctag#145"
     data::NTuple{8, UInt8}
 end
 
-function Base.getproperty(x::Ptr{var"##Ctag#280"}, f::Symbol)
+function Base.getproperty(x::Ptr{var"##Ctag#145"}, f::Symbol)
     f === :draw && return Ptr{IDL_DEVCORE_FCN_DRAW}(x + 0)
     f === :rw_pixels && return Ptr{IDL_DEVCORE_FCN_RW_PIXELS}(x + 0)
     return getfield(x, f)
 end
 
-function Base.getproperty(x::var"##Ctag#280", f::Symbol)
-    r = Ref{var"##Ctag#280"}(x)
-    ptr = Base.unsafe_convert(Ptr{var"##Ctag#280"}, r)
+function Base.getproperty(x::var"##Ctag#145", f::Symbol)
+    r = Ref{var"##Ctag#145"}(x)
+    ptr = Base.unsafe_convert(Ptr{var"##Ctag#145"}, r)
     fptr = getproperty(ptr, f)
     GC.@preserve r unsafe_load(fptr)
 end
 
-function Base.setproperty!(x::Ptr{var"##Ctag#280"}, f::Symbol, v)
+function Base.setproperty!(x::Ptr{var"##Ctag#145"}, f::Symbol, v)
     unsafe_store!(getproperty(x, f), v)
 end
 
-function Base.propertynames(x::var"##Ctag#280", private::Bool = false)
+function Base.propertynames(x::var"##Ctag#145", private::Bool = false)
     (:draw, :rw_pixels, if private
             fieldnames(typeof(x))
         else
@@ -693,29 +687,29 @@ function Base.propertynames(x::var"##Ctag#280", private::Bool = false)
         end...)
 end
 
-struct var"##Ctag#281"
+struct var"##Ctag#146"
     data::NTuple{40, UInt8}
 end
 
-function Base.getproperty(x::Ptr{var"##Ctag#281"}, f::Symbol)
-    f === :image && return Ptr{var"##Ctag#282"}(x + 0)
-    f === :lines && return Ptr{var"##Ctag#283"}(x + 0)
+function Base.getproperty(x::Ptr{var"##Ctag#146"}, f::Symbol)
+    f === :image && return Ptr{var"##Ctag#147"}(x + 0)
+    f === :lines && return Ptr{var"##Ctag#148"}(x + 0)
     f === :fill_style && return Ptr{Cint}(x + 0)
     return getfield(x, f)
 end
 
-function Base.getproperty(x::var"##Ctag#281", f::Symbol)
-    r = Ref{var"##Ctag#281"}(x)
-    ptr = Base.unsafe_convert(Ptr{var"##Ctag#281"}, r)
+function Base.getproperty(x::var"##Ctag#146", f::Symbol)
+    r = Ref{var"##Ctag#146"}(x)
+    ptr = Base.unsafe_convert(Ptr{var"##Ctag#146"}, r)
     fptr = getproperty(ptr, f)
     GC.@preserve r unsafe_load(fptr)
 end
 
-function Base.setproperty!(x::Ptr{var"##Ctag#281"}, f::Symbol, v)
+function Base.setproperty!(x::Ptr{var"##Ctag#146"}, f::Symbol, v)
     unsafe_store!(getproperty(x, f), v)
 end
 
-function Base.propertynames(x::var"##Ctag#281", private::Bool = false)
+function Base.propertynames(x::var"##Ctag#146", private::Bool = false)
     (:image, :lines, :fill_style, if private
             fieldnames(typeof(x))
         else
@@ -723,28 +717,28 @@ function Base.propertynames(x::var"##Ctag#281", private::Bool = false)
         end...)
 end
 
-struct var"##Ctag#285"
+struct var"##Ctag#150"
     data::NTuple{8, UInt8}
 end
 
-function Base.getproperty(x::Ptr{var"##Ctag#285"}, f::Symbol)
+function Base.getproperty(x::Ptr{var"##Ctag#150"}, f::Symbol)
     f === :f && return Ptr{Ptr{Cfloat}}(x + 0)
     f === :d && return Ptr{Ptr{Cdouble}}(x + 0)
     return getfield(x, f)
 end
 
-function Base.getproperty(x::var"##Ctag#285", f::Symbol)
-    r = Ref{var"##Ctag#285"}(x)
-    ptr = Base.unsafe_convert(Ptr{var"##Ctag#285"}, r)
+function Base.getproperty(x::var"##Ctag#150", f::Symbol)
+    r = Ref{var"##Ctag#150"}(x)
+    ptr = Base.unsafe_convert(Ptr{var"##Ctag#150"}, r)
     fptr = getproperty(ptr, f)
     GC.@preserve r unsafe_load(fptr)
 end
 
-function Base.setproperty!(x::Ptr{var"##Ctag#285"}, f::Symbol, v)
+function Base.setproperty!(x::Ptr{var"##Ctag#150"}, f::Symbol, v)
     unsafe_store!(getproperty(x, f), v)
 end
 
-function Base.propertynames(x::var"##Ctag#285", private::Bool = false)
+function Base.propertynames(x::var"##Ctag#150", private::Bool = false)
     (:f, :d, if private
             fieldnames(typeof(x))
         else
@@ -752,29 +746,29 @@ function Base.propertynames(x::var"##Ctag#285", private::Bool = false)
         end...)
 end
 
-struct var"##Ctag#284"
+struct var"##Ctag#149"
     data::NTuple{24, UInt8}
 end
 
-function Base.getproperty(x::Ptr{var"##Ctag#284"}, f::Symbol)
-    f === :z && return Ptr{var"##Ctag#285"}(x + 0)
+function Base.getproperty(x::Ptr{var"##Ctag#149"}, f::Symbol)
+    f === :z && return Ptr{var"##Ctag#150"}(x + 0)
     f === :precision && return Ptr{Cint}(x + 8)
     f === :shades && return Ptr{Ptr{Cint}}(x + 16)
     return getfield(x, f)
 end
 
-function Base.getproperty(x::var"##Ctag#284", f::Symbol)
-    r = Ref{var"##Ctag#284"}(x)
-    ptr = Base.unsafe_convert(Ptr{var"##Ctag#284"}, r)
+function Base.getproperty(x::var"##Ctag#149", f::Symbol)
+    r = Ref{var"##Ctag#149"}(x)
+    ptr = Base.unsafe_convert(Ptr{var"##Ctag#149"}, r)
     fptr = getproperty(ptr, f)
     GC.@preserve r unsafe_load(fptr)
 end
 
-function Base.setproperty!(x::Ptr{var"##Ctag#284"}, f::Symbol, v)
+function Base.setproperty!(x::Ptr{var"##Ctag#149"}, f::Symbol, v)
     unsafe_store!(getproperty(x, f), v)
 end
 
-function Base.propertynames(x::var"##Ctag#284", private::Bool = false)
+function Base.propertynames(x::var"##Ctag#149", private::Bool = false)
     (:z, :precision, :shades, if private
             fieldnames(typeof(x))
         else
@@ -789,8 +783,8 @@ end
 function Base.getproperty(x::Ptr{IDL_POLYFILL_ATTR}, f::Symbol)
     f === :fill_type && return Ptr{Cvoid}(x + 0)
     f === :attr && return Ptr{Ptr{IDL_ATTR_STRUCT}}(x + 8)
-    f === :rtn && return Ptr{var"##Ctag#280"}(x + 16)
-    f === :extra && return Ptr{var"##Ctag#281"}(x + 24)
+    f === :rtn && return Ptr{var"##Ctag#145"}(x + 16)
+    f === :extra && return Ptr{var"##Ctag#146"}(x + 24)
     f === :three && return Ptr{Cvoid}(x + 64)
     f === :pROIState && return Ptr{Ptr{IDL_ROI_STATE}}(x + 88)
     return getfield(x, f)
@@ -930,16 +924,16 @@ end
 
 struct IDL_KW_ARR_DESC
     data::Ptr{Cchar}
-    nmin::IDL_LONG64
-    nmax::IDL_LONG64
-    n::IDL_LONG64
+    nmin::IDL_LONG
+    nmax::IDL_LONG
+    n::IDL_LONG
 end
 
 struct IDL_KW_ARR_DESC_R
     data::Ptr{Cchar}
-    nmin::IDL_LONG64
-    nmax::IDL_LONG64
-    n_offset::Ptr{IDL_LONG64}
+    nmin::IDL_LONG
+    nmax::IDL_LONG
+    n_offset::Ptr{IDL_LONG}
 end
 
 function IDL_KWGetParams(argc, argv, argk, kw_list, plain_args, mask)
@@ -980,15 +974,15 @@ struct IDL_POUT_CNTRL
 end
 
 struct idl_heap_variable
-    data::NTuple{48, UInt8}
+    data::NTuple{56, UInt8}
 end
 
 function Base.getproperty(x::Ptr{idl_heap_variable}, f::Symbol)
     f === :hash && return Ptr{Ptr{idl_heap_variable}}(x + 0)
     f === :hash_id && return Ptr{IDL_HVID}(x + 8)
-    f === :refcount && return Ptr{IDL_LONG}(x + 12)
-    f === :flags && return Ptr{Cint}(x + 16)
-    f === :var && return Ptr{IDL_VARIABLE}(x + 24)
+    f === :refcount && return Ptr{IDL_LONG}(x + 16)
+    f === :flags && return Ptr{Cint}(x + 24)
+    f === :var && return Ptr{IDL_VARIABLE}(x + 32)
     return getfield(x, f)
 end
 
@@ -1045,7 +1039,7 @@ const IDL_SignalHandler_t = Ptr{Cvoid}
 
 struct IDL_STRUCT_TAG_DEF
     name::Ptr{Cchar}
-    dims::Ptr{IDL_LONG64}
+    dims::Ptr{IDL_LONG}
     type::Ptr{Cvoid}
     flags::UCHAR
 end
@@ -1063,61 +1057,60 @@ const IDL_TOUT_OUTF = Ptr{Cvoid}
 
 const IDL_INIT_DATA_OPTIONS_T = Cint
 
-struct var"##Ctag#278"
+struct var"##Ctag#143"
     argc::Cint
     argv::Ptr{Ptr{Cchar}}
 end
-function Base.getproperty(x::Ptr{var"##Ctag#278"}, f::Symbol)
+function Base.getproperty(x::Ptr{var"##Ctag#143"}, f::Symbol)
     f === :argc && return Ptr{Cint}(x + 0)
     f === :argv && return Ptr{Ptr{Ptr{Cchar}}}(x + 8)
     return getfield(x, f)
 end
 
-function Base.getproperty(x::var"##Ctag#278", f::Symbol)
-    r = Ref{var"##Ctag#278"}(x)
-    ptr = Base.unsafe_convert(Ptr{var"##Ctag#278"}, r)
+function Base.getproperty(x::var"##Ctag#143", f::Symbol)
+    r = Ref{var"##Ctag#143"}(x)
+    ptr = Base.unsafe_convert(Ptr{var"##Ctag#143"}, r)
     fptr = getproperty(ptr, f)
     GC.@preserve r unsafe_load(fptr)
 end
 
-function Base.setproperty!(x::Ptr{var"##Ctag#278"}, f::Symbol, v)
+function Base.setproperty!(x::Ptr{var"##Ctag#143"}, f::Symbol, v)
     unsafe_store!(getproperty(x, f), v)
 end
 
 
-struct var"##Ctag#279"
+struct var"##Ctag#144"
     id::Ptr{Cchar}
     data::Ptr{Cuchar}
     length::Cint
 end
-function Base.getproperty(x::Ptr{var"##Ctag#279"}, f::Symbol)
+function Base.getproperty(x::Ptr{var"##Ctag#144"}, f::Symbol)
     f === :id && return Ptr{Ptr{Cchar}}(x + 0)
     f === :data && return Ptr{Ptr{Cuchar}}(x + 8)
     f === :length && return Ptr{Cint}(x + 16)
     return getfield(x, f)
 end
 
-function Base.getproperty(x::var"##Ctag#279", f::Symbol)
-    r = Ref{var"##Ctag#279"}(x)
-    ptr = Base.unsafe_convert(Ptr{var"##Ctag#279"}, r)
+function Base.getproperty(x::var"##Ctag#144", f::Symbol)
+    r = Ref{var"##Ctag#144"}(x)
+    ptr = Base.unsafe_convert(Ptr{var"##Ctag#144"}, r)
     fptr = getproperty(ptr, f)
     GC.@preserve r unsafe_load(fptr)
 end
 
-function Base.setproperty!(x::Ptr{var"##Ctag#279"}, f::Symbol, v)
+function Base.setproperty!(x::Ptr{var"##Ctag#144"}, f::Symbol, v)
     unsafe_store!(getproperty(x, f), v)
 end
 
 
 struct IDL_INIT_DATA
-    data::NTuple{56, UInt8}
+    data::NTuple{48, UInt8}
 end
 
 function Base.getproperty(x::Ptr{IDL_INIT_DATA}, f::Symbol)
     f === :options && return Ptr{IDL_INIT_DATA_OPTIONS_T}(x + 0)
-    f === :clargs && return Ptr{var"##Ctag#278"}(x + 8)
-    f === :hwnd && return Ptr{Ptr{Cvoid}}(x + 24)
-    f === :bufferlicense && return Ptr{var"##Ctag#279"}(x + 32)
+    f === :clargs && return Ptr{var"##Ctag#143"}(x + 8)
+    f === :bufferlicense && return Ptr{var"##Ctag#144"}(x + 24)
     return getfield(x, f)
 end
 
@@ -1133,7 +1126,7 @@ function Base.setproperty!(x::Ptr{IDL_INIT_DATA}, f::Symbol, v)
 end
 
 function Base.propertynames(x::IDL_INIT_DATA, private::Bool = false)
-    (:options, :clargs, :hwnd, :bufferlicense, if private
+    (:options, :clargs, :bufferlicense, if private
             fieldnames(typeof(x))
         else
             ()
@@ -1144,6 +1137,8 @@ end
 const IDL_WIDGET_STUB_SET_SIZE_FUNC = Ptr{Cvoid}
 
 struct IDL_TERMINFO
+    name::Ptr{Cchar}
+    is_tty::Cchar
     lines::Cint
     columns::Cint
 end
@@ -1183,11 +1178,11 @@ function IDL_WinCleanup()
 end
 
 function IDL_MemAlloc(n, err_str, msg_action)
-    ccall((:IDL_MemAlloc, libidl), Ptr{Cvoid}, (IDL_LONG64, Ptr{Cchar}, Cint), n, err_str, msg_action)
+    ccall((:IDL_MemAlloc, libidl), Ptr{Cvoid}, (IDL_LONG, Ptr{Cchar}, Cint), n, err_str, msg_action)
 end
 
 function IDL_MemRealloc(ptr, n, err_str, action)
-    ccall((:IDL_MemRealloc, libidl), Ptr{Cvoid}, (Ptr{Cvoid}, IDL_LONG64, Ptr{Cchar}, Cint), ptr, n, err_str, action)
+    ccall((:IDL_MemRealloc, libidl), Ptr{Cvoid}, (Ptr{Cvoid}, IDL_LONG, Ptr{Cchar}, Cint), ptr, n, err_str, action)
 end
 
 function IDL_MemFree(m, err_str, msg_action)
@@ -1195,15 +1190,15 @@ function IDL_MemFree(m, err_str, msg_action)
 end
 
 function IDL_MemAllocPerm(n, err_str, action)
-    ccall((:IDL_MemAllocPerm, libidl), Ptr{Cvoid}, (IDL_LONG64, Ptr{Cchar}, Cint), n, err_str, action)
+    ccall((:IDL_MemAllocPerm, libidl), Ptr{Cvoid}, (IDL_LONG, Ptr{Cchar}, Cint), n, err_str, action)
 end
 
 function IDL_MakeTempStruct(sdef, n_dim, dim, var, zero)
-    ccall((:IDL_MakeTempStruct, libidl), Ptr{Cchar}, (IDL_StructDefPtr, Cint, Ptr{IDL_LONG64}, Ptr{IDL_VPTR}, Cint), sdef, n_dim, dim, var, zero)
+    ccall((:IDL_MakeTempStruct, libidl), Ptr{Cchar}, (IDL_StructDefPtr, Cint, Ptr{IDL_LONG}, Ptr{IDL_VPTR}, Cint), sdef, n_dim, dim, var, zero)
 end
 
 function IDL_MakeTempStructVector(sdef, dim, var, zero)
-    ccall((:IDL_MakeTempStructVector, libidl), Ptr{Cchar}, (IDL_StructDefPtr, IDL_LONG64, Ptr{IDL_VPTR}, Cint), sdef, dim, var, zero)
+    ccall((:IDL_MakeTempStructVector, libidl), Ptr{Cchar}, (IDL_StructDefPtr, IDL_LONG, Ptr{IDL_VPTR}, Cint), sdef, dim, var, zero)
 end
 
 function IDL_MakeStruct(name, tags)
@@ -1211,11 +1206,11 @@ function IDL_MakeStruct(name, tags)
 end
 
 function IDL_StructTagInfoByName(sdef, name, msg_action, var)
-    ccall((:IDL_StructTagInfoByName, libidl), IDL_LONG64, (IDL_StructDefPtr, Ptr{Cchar}, Cint, Ptr{IDL_VPTR}), sdef, name, msg_action, var)
+    ccall((:IDL_StructTagInfoByName, libidl), IDL_LONG, (IDL_StructDefPtr, Ptr{Cchar}, Cint, Ptr{IDL_VPTR}), sdef, name, msg_action, var)
 end
 
 function IDL_StructTagInfoByIndex(sdef, index, msg_action, var)
-    ccall((:IDL_StructTagInfoByIndex, libidl), IDL_LONG64, (IDL_StructDefPtr, Cint, Cint, Ptr{IDL_VPTR}), sdef, index, msg_action, var)
+    ccall((:IDL_StructTagInfoByIndex, libidl), IDL_LONG, (IDL_StructDefPtr, Cint, Cint, Ptr{IDL_VPTR}), sdef, index, msg_action, var)
 end
 
 function IDL_StructTagNameByIndex(sdef, index, msg_action, struct_name)
@@ -1247,7 +1242,7 @@ function IDL_FindNamedVariable(name, ienter)
 end
 
 function IDL_Rline(s, n, unit, stream, is_tty, prompt, opt)
-    ccall((:IDL_Rline, libidl), Ptr{Cchar}, (Ptr{Cchar}, IDL_LONG64, Cint, Ptr{Cint}, Cint, Ptr{Cchar}, Cint), s, n, unit, stream, is_tty, prompt, opt)
+    ccall((:IDL_Rline, libidl), Ptr{Cchar}, (Ptr{Cchar}, IDL_LONG, Cint, Ptr{Libc.FILE}, Cint, Ptr{Cchar}, Cint), s, n, unit, stream, is_tty, prompt, opt)
 end
 
 function IDL_RlineSetStdinOptions(opt)
@@ -1288,6 +1283,10 @@ end
 
 function IDL_MessageGJE()
     ccall((:IDL_MessageGJE, libidl), Ptr{Cvoid}, ())
+end
+
+function IDL_MessageVE_NOMEMINT64(var, action)
+    ccall((:IDL_MessageVE_NOMEMINT64, libidl), Cvoid, (IDL_VPTR, Cint), var, action)
 end
 
 function IDL_Message_BADARRDNUM(action)
@@ -1463,11 +1462,11 @@ function IDL_FilePathSearch(argc, argv, argk)
 end
 
 function IDL_MakeTempArray(type, n_dim, dim, init, var)
-    ccall((:IDL_MakeTempArray, libidl), Ptr{Cchar}, (Cint, Cint, Ptr{IDL_LONG64}, Cint, Ptr{IDL_VPTR}), type, n_dim, dim, init, var)
+    ccall((:IDL_MakeTempArray, libidl), Ptr{Cchar}, (Cint, Cint, Ptr{IDL_LONG}, Cint, Ptr{IDL_VPTR}), type, n_dim, dim, init, var)
 end
 
 function IDL_MakeTempVector(type, dim, init, var)
-    ccall((:IDL_MakeTempVector, libidl), Ptr{Cchar}, (Cint, IDL_LONG64, Cint, Ptr{IDL_VPTR}), type, dim, init, var)
+    ccall((:IDL_MakeTempVector, libidl), Ptr{Cchar}, (Cint, IDL_LONG, Cint, Ptr{IDL_VPTR}), type, dim, init, var)
 end
 
 function IDL_ToutPush(outf)
@@ -1487,19 +1486,19 @@ function IDL_ExitUnregister(proc)
 end
 
 function IDL_CvtVAXToFloat(fp, n)
-    ccall((:IDL_CvtVAXToFloat, libidl), Cvoid, (Ptr{Cfloat}, IDL_LONG64), fp, n)
+    ccall((:IDL_CvtVAXToFloat, libidl), Cvoid, (Ptr{Cfloat}, IDL_LONG), fp, n)
 end
 
 function IDL_CvtFloatToVAX(fp, n)
-    ccall((:IDL_CvtFloatToVAX, libidl), Cvoid, (Ptr{Cfloat}, IDL_LONG64), fp, n)
+    ccall((:IDL_CvtFloatToVAX, libidl), Cvoid, (Ptr{Cfloat}, IDL_LONG), fp, n)
 end
 
 function IDL_CvtVAXToDouble(dp, n)
-    ccall((:IDL_CvtVAXToDouble, libidl), Cvoid, (Ptr{Cdouble}, IDL_LONG64), dp, n)
+    ccall((:IDL_CvtVAXToDouble, libidl), Cvoid, (Ptr{Cdouble}, IDL_LONG), dp, n)
 end
 
 function IDL_CvtDoubleToVAX(dp, n)
-    ccall((:IDL_CvtDoubleToVAX, libidl), Cvoid, (Ptr{Cdouble}, IDL_LONG64), dp, n)
+    ccall((:IDL_CvtDoubleToVAX, libidl), Cvoid, (Ptr{Cdouble}, IDL_LONG), dp, n)
 end
 
 function IDL_HeapVarHashFind(hash_id)
@@ -1511,11 +1510,11 @@ function IDL_HeapVarNew(hvid_type, value, flags, msg_action)
 end
 
 function IDL_HeapIncrRefCount(hvid, n)
-    ccall((:IDL_HeapIncrRefCount, libidl), Cvoid, (Ptr{IDL_HVID}, IDL_LONG64), hvid, n)
+    ccall((:IDL_HeapIncrRefCount, libidl), Cvoid, (Ptr{IDL_HVID}, IDL_LONG), hvid, n)
 end
 
 function IDL_HeapDecrRefCount(hvid, n)
-    ccall((:IDL_HeapDecrRefCount, libidl), Cvoid, (Ptr{IDL_HVID}, IDL_LONG64), hvid, n)
+    ccall((:IDL_HeapDecrRefCount, libidl), Cvoid, (Ptr{IDL_HVID}, IDL_LONG), hvid, n)
 end
 
 function IDL_ObjCallMethodByString(methName, obj, result, argc, argv, argk)
@@ -1699,7 +1698,7 @@ function IDL_SysRtnAdd(defs, is_function, cnt)
 end
 
 function IDL_SysRtnNumEnabled(is_function, enabled)
-    ccall((:IDL_SysRtnNumEnabled, libidl), IDL_LONG64, (Cint, Cint), is_function, enabled)
+    ccall((:IDL_SysRtnNumEnabled, libidl), IDL_LONG, (Cint, Cint), is_function, enabled)
 end
 
 function IDL_SysRtnGetEnabledNames(is_function, str, enabled)
@@ -1707,7 +1706,7 @@ function IDL_SysRtnGetEnabledNames(is_function, str, enabled)
 end
 
 function IDL_SysRtnEnable(is_function, names, n, option, disfcn)
-    ccall((:IDL_SysRtnEnable, libidl), Cvoid, (Cint, Ptr{IDL_STRING}, IDL_LONG64, Cint, IDL_SYSRTN_GENERIC), is_function, names, n, option, disfcn)
+    ccall((:IDL_SysRtnEnable, libidl), Cvoid, (Cint, Ptr{IDL_STRING}, IDL_LONG, Cint, IDL_SYSRTN_GENERIC), is_function, names, n, option, disfcn)
 end
 
 function IDL_SysRtnGetRealPtr(is_function, name)
@@ -1840,7 +1839,7 @@ function IDL_DoubleScalar(v)
 end
 
 function IDL_MEMINTScalar(v)
-    ccall((:IDL_MEMINTScalar, libidl), IDL_LONG64, (IDL_VPTR,), v)
+    ccall((:IDL_MEMINTScalar, libidl), IDL_LONG, (IDL_VPTR,), v)
 end
 
 function IDL_FILEINTScalar(v)
@@ -1876,7 +1875,7 @@ function IDL_StrBase_strncasecmp(str1, str2, nchars)
 end
 
 function IDL_VarGetData(v, n, pd, ensure_simple)
-    ccall((:IDL_VarGetData, libidl), Cvoid, (IDL_VPTR, Ptr{IDL_LONG64}, Ptr{Ptr{Cchar}}, Cint), v, n, pd, ensure_simple)
+    ccall((:IDL_VarGetData, libidl), Cvoid, (IDL_VPTR, Ptr{IDL_LONG}, Ptr{Ptr{Cchar}}, Cint), v, n, pd, ensure_simple)
 end
 
 function IDL_VarGet1EltStringDesc(v, tc_v, like_print)
@@ -1888,11 +1887,11 @@ function IDL_VarGetString(v)
 end
 
 function IDL_ImportArray(n_dim, dim, type, data, free_cb, s)
-    ccall((:IDL_ImportArray, libidl), IDL_VPTR, (Cint, Ptr{IDL_LONG64}, Cint, Ptr{UCHAR}, IDL_ARRAY_FREE_CB, IDL_StructDefPtr), n_dim, dim, type, data, free_cb, s)
+    ccall((:IDL_ImportArray, libidl), IDL_VPTR, (Cint, Ptr{IDL_LONG}, Cint, Ptr{UCHAR}, IDL_ARRAY_FREE_CB, IDL_StructDefPtr), n_dim, dim, type, data, free_cb, s)
 end
 
 function IDL_ImportNamedArray(name, n_dim, dim, type, data, free_cb, s)
-    ccall((:IDL_ImportNamedArray, libidl), IDL_VPTR, (Ptr{Cchar}, Cint, Ptr{IDL_LONG64}, Cint, Ptr{UCHAR}, IDL_ARRAY_FREE_CB, IDL_StructDefPtr), name, n_dim, dim, type, data, free_cb, s)
+    ccall((:IDL_ImportNamedArray, libidl), IDL_VPTR, (Ptr{Cchar}, Cint, Ptr{IDL_LONG}, Cint, Ptr{UCHAR}, IDL_ARRAY_FREE_CB, IDL_StructDefPtr), name, n_dim, dim, type, data, free_cb, s)
 end
 
 function IDL_VarTypeConvert(v, type)
@@ -1912,11 +1911,11 @@ function IDL_StrDownCase(dest, src)
 end
 
 function IDL_StrDup(str, n)
-    ccall((:IDL_StrDup, libidl), Cvoid, (Ptr{IDL_STRING}, IDL_LONG64), str, n)
+    ccall((:IDL_StrDup, libidl), Cvoid, (Ptr{IDL_STRING}, IDL_LONG), str, n)
 end
 
 function IDL_StrDelete(str, n)
-    ccall((:IDL_StrDelete, libidl), Cvoid, (Ptr{IDL_STRING}, IDL_LONG64), str, n)
+    ccall((:IDL_StrDelete, libidl), Cvoid, (Ptr{IDL_STRING}, IDL_LONG), str, n)
 end
 
 function IDL_StrStore(s, fs)
@@ -2116,7 +2115,7 @@ function IDL_GettmpFILEINT(value)
 end
 
 function IDL_GettmpMEMINT(value)
-    ccall((:IDL_GettmpMEMINT, libidl), IDL_VPTR, (IDL_LONG64,), value)
+    ccall((:IDL_GettmpMEMINT, libidl), IDL_VPTR, (IDL_LONG,), value)
 end
 
 # no prototype is found for this function at idl_export.h:3193:27, please use with caution
@@ -2125,11 +2124,11 @@ function IDL_GettmpNULL()
 end
 
 function IDL_GetScratch(p, n_elts, elt_size)
-    ccall((:IDL_GetScratch, libidl), Ptr{Cchar}, (Ptr{IDL_VPTR}, IDL_LONG64, IDL_LONG64), p, n_elts, elt_size)
+    ccall((:IDL_GetScratch, libidl), Ptr{Cchar}, (Ptr{IDL_VPTR}, IDL_LONG, IDL_LONG), p, n_elts, elt_size)
 end
 
 function IDL_GetScratchOnThreshold(auto_buf, auto_elts, n_elts, elt_size, tempvar)
-    ccall((:IDL_GetScratchOnThreshold, libidl), Ptr{Cchar}, (Ptr{Cchar}, IDL_LONG64, IDL_LONG64, IDL_LONG64, Ptr{IDL_VPTR}), auto_buf, auto_elts, n_elts, elt_size, tempvar)
+    ccall((:IDL_GetScratchOnThreshold, libidl), Ptr{Cchar}, (Ptr{Cchar}, IDL_LONG, IDL_LONG, IDL_LONG, Ptr{IDL_VPTR}), auto_buf, auto_elts, n_elts, elt_size, tempvar)
 end
 
 function IDL_AddDevice(dev, msg_action)
@@ -2152,7 +2151,7 @@ function IDL_HlsToRgb(h, l, s, r, g, b, n)
     ccall((:IDL_HlsToRgb, libidl), Cvoid, (Ptr{Cfloat}, Ptr{Cfloat}, Ptr{Cfloat}, Ptr{UCHAR}, Ptr{UCHAR}, Ptr{UCHAR}, Cint), h, l, s, r, g, b, n)
 end
 
-struct var"##Ctag#282"
+struct var"##Ctag#147"
     data::Ptr{UCHAR}
     d1::Cint
     d2::Cint
@@ -2162,7 +2161,7 @@ struct var"##Ctag#282"
     transparent::UCHAR
     im_depth::UCHAR
 end
-function Base.getproperty(x::Ptr{var"##Ctag#282"}, f::Symbol)
+function Base.getproperty(x::Ptr{var"##Ctag#147"}, f::Symbol)
     f === :data && return Ptr{Ptr{UCHAR}}(x + 0)
     f === :d1 && return Ptr{Cint}(x + 8)
     f === :d2 && return Ptr{Cint}(x + 12)
@@ -2174,25 +2173,25 @@ function Base.getproperty(x::Ptr{var"##Ctag#282"}, f::Symbol)
     return getfield(x, f)
 end
 
-function Base.getproperty(x::var"##Ctag#282", f::Symbol)
-    r = Ref{var"##Ctag#282"}(x)
-    ptr = Base.unsafe_convert(Ptr{var"##Ctag#282"}, r)
+function Base.getproperty(x::var"##Ctag#147", f::Symbol)
+    r = Ref{var"##Ctag#147"}(x)
+    ptr = Base.unsafe_convert(Ptr{var"##Ctag#147"}, r)
     fptr = getproperty(ptr, f)
     GC.@preserve r unsafe_load(fptr)
 end
 
-function Base.setproperty!(x::Ptr{var"##Ctag#282"}, f::Symbol, v)
+function Base.setproperty!(x::Ptr{var"##Ctag#147"}, f::Symbol, v)
     unsafe_store!(getproperty(x, f), v)
 end
 
 
-struct var"##Ctag#283"
+struct var"##Ctag#148"
     angle::Cfloat
     spacing::Cint
     ct::Cfloat
     st::Cfloat
 end
-function Base.getproperty(x::Ptr{var"##Ctag#283"}, f::Symbol)
+function Base.getproperty(x::Ptr{var"##Ctag#148"}, f::Symbol)
     f === :angle && return Ptr{Cfloat}(x + 0)
     f === :spacing && return Ptr{Cint}(x + 4)
     f === :ct && return Ptr{Cfloat}(x + 8)
@@ -2200,25 +2199,25 @@ function Base.getproperty(x::Ptr{var"##Ctag#283"}, f::Symbol)
     return getfield(x, f)
 end
 
-function Base.getproperty(x::var"##Ctag#283", f::Symbol)
-    r = Ref{var"##Ctag#283"}(x)
-    ptr = Base.unsafe_convert(Ptr{var"##Ctag#283"}, r)
+function Base.getproperty(x::var"##Ctag#148", f::Symbol)
+    r = Ref{var"##Ctag#148"}(x)
+    ptr = Base.unsafe_convert(Ptr{var"##Ctag#148"}, r)
     fptr = getproperty(ptr, f)
     GC.@preserve r unsafe_load(fptr)
 end
 
-function Base.setproperty!(x::Ptr{var"##Ctag#283"}, f::Symbol, v)
+function Base.setproperty!(x::Ptr{var"##Ctag#148"}, f::Symbol, v)
     unsafe_store!(getproperty(x, f), v)
 end
 
 
-struct var"##Ctag#286"
+struct var"##Ctag#151"
     x::Cfloat
     y::Cfloat
     z::Cfloat
     h::Cfloat
 end
-function Base.getproperty(x::Ptr{var"##Ctag#286"}, f::Symbol)
+function Base.getproperty(x::Ptr{var"##Ctag#151"}, f::Symbol)
     f === :x && return Ptr{Cfloat}(x + 0)
     f === :y && return Ptr{Cfloat}(x + 4)
     f === :z && return Ptr{Cfloat}(x + 8)
@@ -2226,47 +2225,47 @@ function Base.getproperty(x::Ptr{var"##Ctag#286"}, f::Symbol)
     return getfield(x, f)
 end
 
-function Base.getproperty(x::var"##Ctag#286", f::Symbol)
-    r = Ref{var"##Ctag#286"}(x)
-    ptr = Base.unsafe_convert(Ptr{var"##Ctag#286"}, r)
+function Base.getproperty(x::var"##Ctag#151", f::Symbol)
+    r = Ref{var"##Ctag#151"}(x)
+    ptr = Base.unsafe_convert(Ptr{var"##Ctag#151"}, r)
     fptr = getproperty(ptr, f)
     GC.@preserve r unsafe_load(fptr)
 end
 
-function Base.setproperty!(x::Ptr{var"##Ctag#286"}, f::Symbol, v)
+function Base.setproperty!(x::Ptr{var"##Ctag#151"}, f::Symbol, v)
     unsafe_store!(getproperty(x, f), v)
 end
 
 
-struct var"##Ctag#287"
+struct var"##Ctag#152"
     x::Cint
     y::Cint
 end
-function Base.getproperty(x::Ptr{var"##Ctag#287"}, f::Symbol)
+function Base.getproperty(x::Ptr{var"##Ctag#152"}, f::Symbol)
     f === :x && return Ptr{Cint}(x + 0)
     f === :y && return Ptr{Cint}(x + 4)
     return getfield(x, f)
 end
 
-function Base.getproperty(x::var"##Ctag#287", f::Symbol)
-    r = Ref{var"##Ctag#287"}(x)
-    ptr = Base.unsafe_convert(Ptr{var"##Ctag#287"}, r)
+function Base.getproperty(x::var"##Ctag#152", f::Symbol)
+    r = Ref{var"##Ctag#152"}(x)
+    ptr = Base.unsafe_convert(Ptr{var"##Ctag#152"}, r)
     fptr = getproperty(ptr, f)
     GC.@preserve r unsafe_load(fptr)
 end
 
-function Base.setproperty!(x::Ptr{var"##Ctag#287"}, f::Symbol, v)
+function Base.setproperty!(x::Ptr{var"##Ctag#152"}, f::Symbol, v)
     unsafe_store!(getproperty(x, f), v)
 end
 
 
-struct var"##Ctag#288"
+struct var"##Ctag#153"
     x::Cdouble
     y::Cdouble
     z::Cdouble
     h::Cdouble
 end
-function Base.getproperty(x::Ptr{var"##Ctag#288"}, f::Symbol)
+function Base.getproperty(x::Ptr{var"##Ctag#153"}, f::Symbol)
     f === :x && return Ptr{Cdouble}(x + 0)
     f === :y && return Ptr{Cdouble}(x + 8)
     f === :z && return Ptr{Cdouble}(x + 16)
@@ -2274,25 +2273,25 @@ function Base.getproperty(x::Ptr{var"##Ctag#288"}, f::Symbol)
     return getfield(x, f)
 end
 
-function Base.getproperty(x::var"##Ctag#288", f::Symbol)
-    r = Ref{var"##Ctag#288"}(x)
-    ptr = Base.unsafe_convert(Ptr{var"##Ctag#288"}, r)
+function Base.getproperty(x::var"##Ctag#153", f::Symbol)
+    r = Ref{var"##Ctag#153"}(x)
+    ptr = Base.unsafe_convert(Ptr{var"##Ctag#153"}, r)
     fptr = getproperty(ptr, f)
     GC.@preserve r unsafe_load(fptr)
 end
 
-function Base.setproperty!(x::Ptr{var"##Ctag#288"}, f::Symbol, v)
+function Base.setproperty!(x::Ptr{var"##Ctag#153"}, f::Symbol, v)
     unsafe_store!(getproperty(x, f), v)
 end
 
 
-struct var"##Ctag#289"
+struct var"##Ctag#154"
     x::Cint
     y::Cint
     z::Cfloat
     h::Cfloat
 end
-function Base.getproperty(x::Ptr{var"##Ctag#289"}, f::Symbol)
+function Base.getproperty(x::Ptr{var"##Ctag#154"}, f::Symbol)
     f === :x && return Ptr{Cint}(x + 0)
     f === :y && return Ptr{Cint}(x + 4)
     f === :z && return Ptr{Cfloat}(x + 8)
@@ -2300,14 +2299,14 @@ function Base.getproperty(x::Ptr{var"##Ctag#289"}, f::Symbol)
     return getfield(x, f)
 end
 
-function Base.getproperty(x::var"##Ctag#289", f::Symbol)
-    r = Ref{var"##Ctag#289"}(x)
-    ptr = Base.unsafe_convert(Ptr{var"##Ctag#289"}, r)
+function Base.getproperty(x::var"##Ctag#154", f::Symbol)
+    r = Ref{var"##Ctag#154"}(x)
+    ptr = Base.unsafe_convert(Ptr{var"##Ctag#154"}, r)
     fptr = getproperty(ptr, f)
     GC.@preserve r unsafe_load(fptr)
 end
 
-function Base.setproperty!(x::Ptr{var"##Ctag#289"}, f::Symbol, v)
+function Base.setproperty!(x::Ptr{var"##Ctag#154"}, f::Symbol, v)
     unsafe_store!(getproperty(x, f), v)
 end
 
@@ -2322,7 +2321,7 @@ const IDL_M_BADARRDIM = -158
 
 const IDL_SIZEOF_C_LONG = 4
 
-const IDL_SIZEOF_C_PTR = 8
+const IDL_SIZEOF_C_PTR = 4
 
 const IDL_DEBUGGING = 1
 
@@ -2330,15 +2329,13 @@ const FALSE = 0
 
 const TRUE = 1
 
-# Skipping MacroDefinition: IDL_CDECL __cdecl
-
 const IDL_MAX_ARRAY_DIM = 8
 
 const IDL_MAXPARAMS = 65535
 
-const IDL_TYP_LONG64 = 14
+const IDL_TYP_LONG = 3
 
-const IDL_TYP_PTRINT = IDL_TYP_LONG64
+const IDL_TYP_PTRINT = IDL_TYP_LONG
 
 const IDL_MAXIDLEN = 1000
 
@@ -2349,8 +2346,6 @@ const IDL_TYP_UNDEF = 0
 const IDL_TYP_BYTE = 1
 
 const IDL_TYP_INT = 2
-
-const IDL_TYP_LONG = 3
 
 const IDL_TYP_FLOAT = 4
 
@@ -2372,19 +2367,21 @@ const IDL_TYP_UINT = 12
 
 const IDL_TYP_ULONG = 13
 
+const IDL_TYP_LONG64 = 14
+
 const IDL_TYP_ULONG64 = 15
 
 const IDL_MAX_TYPE = 15
 
 const IDL_NUM_TYPES = 16
 
-const IDL_TYP_MEMINT = IDL_TYP_LONG64
+const IDL_TYP_MEMINT = IDL_TYP_LONG
 
-const IDL_TYP_UMEMINT = IDL_TYP_ULONG64
+const IDL_TYP_UMEMINT = IDL_TYP_ULONG
 
-const IDL_MEMINT = IDL_LONG64
+const IDL_MEMINT = IDL_LONG
 
-const IDL_UMEMINT = IDL_ULONG64
+const IDL_UMEMINT = IDL_ULONG
 
 const IDL_TYP_FILEINT = IDL_TYP_LONG64
 
