@@ -23,7 +23,10 @@ struct DictView <: AbstractDict{Any,Any}
 
 	function DictView(o::IDLObject)
 		# HASH subclasses such as DICTIONARY answer to the hash methods too.
-		if idlvalue("ISA($(name(checkobj(o))), 'HASH')") != 1
+		if idlvalue("ISA($(name(checkobj(o))), 'HASH')") != 1 &&
+			idlvalue("ISA($(name(checkobj(o))), 'ORDEREDHASH')") != 1 &&
+			idlvalue("ISA($(name(checkobj(o))), 'DICTIONARY')") != 1
+
 			class = idlvalue("OBJ_CLASS($(name(o)))")
 			throw(ArgumentError("jldict needs a HASH object; '$(name(o))' is a $class."))
 		end
