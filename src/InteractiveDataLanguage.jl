@@ -41,7 +41,10 @@ export IDL,
     jlstruct,
     idlstruct,
     ntags,
-    tags
+    tags,
+
+    IDLObject,
+    jlobject
 
 # idl must be in path.
 if Sys.isunix()
@@ -73,6 +76,10 @@ const CB_HOLDING = Dict{Ptr, Base.Callable}()
 # so we buffer them in this global for better printing.
 const ERROR_MSG = Ref{String}("")
 
+# Last error IDL reported, kept so a caller can turn it into a Julia
+# error; the output callback still logs every error it sees.
+const LAST_ERROR_MSG = Ref{Union{Nothing,String}}(nothing)
+
 @inline preserve_ref__(x__::Ptr, x::Ref) = (JL_ARR_ROOT[convert(Ptr{UInt8}, x__)] = x; return convert(Ptr{UInt8}, x__))
 @inline preserve_cb(x__::Ptr, cb::Base.Callable) = CB_HOLDING[x__] = cb
 
@@ -98,6 +105,7 @@ function __output_callback(flags, buf::Ptr{UInt8}, n)::Cvoid
     if (flags & IDL_TOUT_F_STDERR) != 0
         ERROR_MSG[] *= "$msg" * nl
         if IDL_SysvErrorCodeValue() != 0
+            LAST_ERROR_MSG[] = ERROR_MSG[]
             @error "IDL Error ($(IDL_SysvErrorCodeValue())):\n$(ERROR_MSG[])"
             ERROR_MSG[] = ""
             IDL_MessageResetSysvErrorState()
@@ -131,9 +139,13 @@ include("type_conversion.jl")
 include("variables.jl")
 include("arrays.jl")
 include("structs.jl")
+include("objects.jl")
 
 function Base.getindex(v::AbstractIDLVariable)
-    return isstruct(v) ? jlstruct(v) : isarray(v) ? jlview(v) : jlscalar(v)
+    return isstruct(v) ? jlstruct(v) :
+        vartype(v) == T_OBJREF ? jlobject(v) :
+        isarray(v) ? jlview(v) :
+        jlscalar(v)
 end
 
 function Base.setindex!(v::AbstractIDLVariable, x::T) where
@@ -162,8 +174,11 @@ clear_float_exceptions() = Sys.iswindows() ?
     ccall(:feclearexcept, Cint, (Cint,), 0x3f)  # FE_ALL_EXCEPT is 0x3d on glibc/Darwin x86, 0x1f on Darwin arm64
 
 idlrun(string::AbstractString) = begin
-    # remove comments and coalesce line breaks
-    string = replace(replace(string, r";.*" => ""), r"\$\s*\n" => "")
+    # Quoted strings must survive comment and continuation removal unchanged.
+    string = replace(string, r"""'(?:[^'\r\n]|'')*'|"(?:[^"\r\n]|"")*"|;[^\r\n]*|\$\s*(?:;[^\r\n]*)?\r?\n""" =>
+        token -> first(token) in ('\'', '"') ? token : "")
+    # IDL takes its temporary variables back when it runs a statement
+    invalidate_temps!()
     iostring = IOBuffer(string)
     for line in eachline(iostring)
         clear_float_exceptions()

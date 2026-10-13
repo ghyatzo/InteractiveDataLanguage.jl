@@ -62,7 +62,7 @@ varscalar(var__::Ptr{IDL_VARIABLE}) 	=
 abstract type AbstractIDLVariable end
 function varptr__ end
 
-isvalid(v::AbstractIDLVariable) 		= IDL_TYP(vartype(getfield(v, :ptr)))  != T_UNDEF
+isvalid(v::AbstractIDLVariable) 		= vartype(v) != T_UNDEF
 
 varflags(v::AbstractIDLVariable) 		= varflags(varptr__(v))
 vartype(v::AbstractIDLVariable) 		= IDL_TYP(vartype(varptr__(v)))
@@ -83,7 +83,11 @@ Base.isnothing(v::AbstractIDLVariable) 	= (varflags(v) & IDL_V_NULL) != 0
 
 ## TODO: maybe use the internal "ENSURE etc etc" functions from idl.
 checkvalid(v::AbstractIDLVariable) 	= isvalid(v)  || throw(UndefVarError(Symbol(name(v)), "IDL"))
-checkarray(v::AbstractIDLVariable) 	= isarray(v)  || throw(ErrorException("The variable is not an array."))
+function checkarray(v::AbstractIDLVariable)
+	isarray(v) || throw(ErrorException("The variable is not an array."))
+	vartype(v) == T_OBJREF && throw(ArgumentError("Arrays of IDL objects are not supported."))
+	return nothing
+end
 checkstruct(v::AbstractIDLVariable) = isstruct(v) || throw(ErrorException("The variable is not a structure."))
 checkscalar(v::AbstractIDLVariable) = isscalar(v) || throw(ErrorException("The variable is not a scalar."))
 
@@ -108,8 +112,8 @@ mutable struct Variable <: AbstractIDLVariable
 			error("File Variables not yet implemented")
 		end
 
-		(var_t == IDL_TYP_PTR || var_t == IDL_TYP_OBJREF) &&
-			error("Getting variables of type IDL_TYP_PTR or IDL_TYP_OBJREF is not supported.")
+		var_t == IDL_TYP_PTR &&
+			error("Getting variables of type IDL_TYP_PTR is not supported.")
 
 		new(v__)
 	end
@@ -132,6 +136,7 @@ mutable struct TemporaryVariable <: AbstractIDLVariable
 
 		var_f & IDL_V_TEMP != 0 || error("The variable pointer needs to be pointing to a temporary variable.")
 		this = new(v__, true)
+		push!(LIVE_TEMPS, WeakRef(this))
 
 		finalizer(this) do this
 			if this.safety
@@ -140,6 +145,22 @@ mutable struct TemporaryVariable <: AbstractIDLVariable
 			end
 		end
 	end
+end
+
+# IDL rewinds its temporary variables every time it runs a statement: a temp we
+# still hold is gone, and its slot is handed to a later temp. `idlrun` retires
+# the temps created since the last statement so that a stale finalizer cannot
+# delete a live temp that reused the slot, and so that using a dead temp throws
+# instead of reading whatever took its place.
+const LIVE_TEMPS = WeakRef[]
+
+function invalidate_temps!()
+	for w in LIVE_TEMPS
+		t = w.value
+		t === nothing || setfield!(t, :safety, false)
+	end
+	empty!(LIVE_TEMPS)
+	return nothing
 end
 
 varptr__(v::TemporaryVariable) = begin

@@ -26,6 +26,8 @@ function tag_info(sdef_::IDL_StructDefPtr, i::Int)
 	tagvar = Ref{Ptr{IDL_VARIABLE}}()
 	offset = IDL_StructTagInfoByIndex(sdef_, Cint(i - 1), IDL_MSG_RET, tagvar)
 	offset == -1 && throw(ArgumentError("The structure does not have a tag number $i."))
+	vartype(tagvar[]) == IDL_TYP_OBJREF &&
+		throw(ArgumentError("Object-reference structure tags are not supported."))
 
 	# The returned variable describes type and shape of the tag but
 	# holds no valid data. Data is always read at `base + offset`.
@@ -95,7 +97,7 @@ function tag_get(s::StructView, i::Int)
 	# (sdef, data) if it becomes necessary.
 	isstruct(proto) && return StructView(structdef(proto), addr, s)
 
-	isarray(proto) && return TagArrayView(proto, addr)
+	isarray(proto) && return TagArrayView(proto, addr, s)
 
 	eltype(proto) === String && return convert(String, unsafe_load(Ptr{IDL_STRING}(addr)))
 
@@ -113,7 +115,7 @@ function tag_set!(s::StructView, i::Int, val)
 			setproperty!(nested, k, v_)
 		end
 	elseif isarray(proto)
-		copyto!(TagArrayView(proto, addr), val)
+		copyto!(TagArrayView(proto, addr, s), val)
 	elseif eltype(proto) === String
 		str_store!(addr, val)
 	else
@@ -147,10 +149,11 @@ end
 struct TagArrayView{T, N} <: AbstractArrayView{T, N}
 	v::Variable
 	ptr::Ptr{UCHAR}
+	ref # keeps the data owner alive
 
-	function TagArrayView(v::Variable, ptr::Ptr{UCHAR})
+	function TagArrayView(v::Variable, ptr::Ptr{UCHAR}, ref)
 		N = arr_ndims(array__(v))
-		return new{eltype(v), N}(v, ptr)
+		return new{eltype(v), N}(v, ptr, ref)
 	end
 end
 

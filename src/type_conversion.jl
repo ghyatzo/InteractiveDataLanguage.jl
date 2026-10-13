@@ -48,7 +48,7 @@ jltype(t::IDL_TYP) = begin
 	t == T_STRUCT 	? DataType 		: # TODO
 	t == T_DCOMPLEX ? ComplexF64 	:
 	t == T_PTR 		? Ptr 			: # TODO
-	t == T_OBJREF 	? Ptr 			: # TODO
+	t == T_OBJREF 	? IDLObject 	:
 	t == T_UINT 	? UInt16 		:
 	t == T_ULONG 	? UInt32 		:
 	t == T_LONG64 	? Int64 		:
@@ -112,3 +112,71 @@ Base.convert(::Type{ComplexF64}, idlc::IDL_DCOMPLEX) = ComplexF64(idlc.r, idlc.i
 
 _idl2jl(t::T) where T <: JL_SCALAR = t
 _idl2jl(t::IDL_STRING) = convert(String, t)
+
+
+#------------------------------------------------------------
+#
+#	Julia values as IDL source text
+#
+#------------------------------------------------------------
+
+# IDL literals carry their type in a suffix: B/S/US/L/UL/LL/ULL for the
+# integer widths (the same table the tests use), `d` for double. IDL reads
+# an exponent-less `d` as double, so `1.0e-320` is written `1.0d-320`.
+_idl_int_suffix(::Type{UInt8})  = "B"
+_idl_int_suffix(::Type{Int16})  = "S"
+_idl_int_suffix(::Type{UInt16}) = "US"
+_idl_int_suffix(::Type{Int32})  = "L"
+_idl_int_suffix(::Type{UInt32}) = "UL"
+_idl_int_suffix(::Type{Int64})  = "LL"
+_idl_int_suffix(::Type{UInt64}) = "ULL"
+_idl_int_suffix(::Type{T}) where T = throw(ArgumentError("IDL has no integer type for $(T)."))
+
+idl_literal(x::Integer) = string(x) * _idl_int_suffix(typeof(x))
+idl_literal(x::Bool) = x ? "1B" : "0B"
+
+function idl_literal(x::Float32)
+	isnan(x) && return "!VALUES.F_NAN"
+	isinf(x) && return x > 0 ? "!VALUES.F_INFINITY" : "-!VALUES.F_INFINITY"
+	# Julia writes the exponent of a Float32 with an `f`
+	return replace(string(x), 'f' => 'e')
+end
+
+function idl_literal(x::Float64)
+	isnan(x) && return "!VALUES.D_NAN"
+	isinf(x) && return x > 0 ? "!VALUES.D_INFINITY" : "-!VALUES.D_INFINITY"
+	i = findfirst(c -> c == 'e', string(x))
+	i === nothing && return string(x) * "d"
+	return string(x)[1:(i - 1)] * "d" * string(x)[(i + 1):end]
+end
+
+idl_literal(z::ComplexF32) = "complex($(idl_literal(real(z))), $(idl_literal(imag(z))))"
+idl_literal(z::ComplexF64) = "dcomplex($(idl_literal(real(z))), $(idl_literal(imag(z))))"
+
+idl_literal(::Nothing) = "!NULL"
+
+function idl_literal(s::AbstractString)
+	occursin('\n', s) && throw(ArgumentError("IDL strings cannot contain newlines."))
+	return "'" * replace(s, "'" => "''") * "'"
+end
+
+function idl_literal(a::AbstractArray)
+	eltype(a) <: Union{JL_SCALAR, Bool, AbstractString} ||
+		throw(ArgumentError("IDL cannot take an array of $(eltype(a))."))
+	isempty(a) && throw(ArgumentError("IDL cannot express an empty array."))
+
+	values = join(map(idl_literal, vec(a)), ", ")
+	return ndims(a) <= 1 ? "[$values]" : "reform([$values], $(join(size(a), ", ")))"
+end
+
+function idl_literal(nt::NamedTuple)
+	isempty(nt) && throw(ArgumentError("IDL cannot express an empty structure."))
+
+	# IDL tag names are always uppercase
+	tags = join(("$(uppercase(string(k))): $(idl_literal(v))" for (k, v) in pairs(nt)), ", ")
+	return "{$tags}"
+end
+
+idl_literal(x) = throw(ArgumentError("IDL cannot take a $(typeof(x))."))
+
+_idl_args(args...) = join(map(idl_literal, args), ", ")

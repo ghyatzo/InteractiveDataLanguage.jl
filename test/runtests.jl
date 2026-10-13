@@ -33,12 +33,36 @@ end
 	@test_logs min_level = Base.CoreLogging.Error idlrun("float_except_probe = 1")
 end
 
+@testset "Temporary variables" begin
+	# IDL hands its temporary variables back when it runs a statement, and
+	# then re-issues their slots. A temp held across one is dead: using it has
+	# to fail loudly, and its finalizer must not delete whatever took the slot.
+	tv = maketemp(Float64[1.0, 2.0])
+	slot = IDL.varptr__(tv)
+	@test IDL.vartype(tv) == IDL.T_DOUBLE
+
+	idlrun("temp_probe = 1")
+	@test_throws "The temporary variable has been freed." IDL.varptr__(tv)
+	@test_throws "The temporary variable has been freed." IDL.isvalid(tv)
+	@test_throws "The temporary variable has been freed." convert(Nothing, tv)
+	@test_throws "The temporary variable has been freed." repr(tv)
+
+	fresh = maketemp(Float64[9.0, 9.0])
+	@test IDL.varptr__(fresh) === slot
+	finalize(tv)
+	@test IDL.vartype(fresh) == IDL.T_DOUBLE
+end
+
 @testset "Arrays" begin
 	include("arrays.jl")
 end
 
 @testset "Structs" begin
 	include("structs.jl")
+end
+
+@testset "Objects" begin
+	include("objects.jl")
 end
 
 @testset "REPL" begin
