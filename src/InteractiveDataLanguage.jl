@@ -44,7 +44,9 @@ export IDL,
     tags,
 
     IDLObject,
-    jlobject
+    jlobject,
+    jldict,
+    idldict
 
 # idl must be in path.
 if Sys.isunix()
@@ -139,7 +141,9 @@ include("type_conversion.jl")
 include("variables.jl")
 include("arrays.jl")
 include("structs.jl")
+
 include("objects.jl")
+include("dicts.jl")
 
 function Base.getindex(v::AbstractIDLVariable)
     return isstruct(v) ? jlstruct(v) :

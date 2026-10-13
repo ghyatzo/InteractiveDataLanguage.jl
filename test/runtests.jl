@@ -65,6 +65,10 @@ end
 	include("objects.jl")
 end
 
+@testset "Dicts" begin
+	include("dicts.jl")
+end
+
 @testset "REPL" begin
 	include("repl.jl")
 end
