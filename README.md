@@ -26,42 +26,6 @@ IDL can be called externally using either the `RPC` or `Callable` interface.
 This library opted to only support the `Callable` IDL interface due to better ergonomics
 and power when managing memory between IDL and Julia.
 
-## TODO
-Currently the package is in very early stages of development, the API is still in the process of being ironed out. Any kind of feedback is welcome!
-
-Current support:
-- [x] Scalars
-	- [x] IDL -> Julia
-	- [x] Julia -> IDL
-	- [x] Create temporary variables
-- [x] Arrays
-	- [x] IDL -> Julia (No copy data)
-	- [x] IDL -> Julia (Copy data)
-	- [x] Julia -> IDL (No copy data)
-	- [x] Julia -> IDL (Copy data)
-	- [x] Initialize IDL arrays from Julia
-	- [x] Create temporary arrays
-- [x] Structures
-	- [x] IDL -> Julia (No copy data)
-	- [x] Julia -> IDL (Copy data)
-	- [x] Nested structures
-	- [x] Arrays of structures
-	- [x] Named structures
-- [ ] Objects (probably not planned)
-
-Extras:
-- [x] REPL Mode (`IDL>` prompt)
-- [x] `@idl_str` macro
-- [ ] automatic interpolation of variables from julia and idl
-
-Currently the package provides the bare minimum to have some basic interaction between IDL and julia.
-
-Notable missing features are handling objects. Full support for all objects types is probably out of scope for this package.
-
-I've been developing this package out of personal need, and will expand it accordingly as the need arise or if there is enough interest/necessity.
-
-For the time being, most shortcomings of the current API can be overcome by using the `idlrun` functionality, by crafting a valid ad hoc IDL string to be `eval`'d by the IDL runtime. It's rough, hacky, but it does the job.
-
 # Quickstart
 
 ```julia

@@ -1,6 +1,6 @@
 name = "InteractiveDataLanguage"
 uuid = "d8fbff9c-ffdd-4f12-b08d-aa41cc43ce74"
-version = "0.3.3"
+version = "0.4.0"
 authors = ["Camillo Schenone"]
 
 [workspace]
@@ -14,4 +14,4 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 [compat]
 CEnum = "0.5.0"
 StaticArrays = "1.9.17"
-julia = "1.12"
+julia = "1"
