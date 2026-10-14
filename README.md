@@ -307,7 +307,68 @@ julia> ms_zero.S = 7
 > [!WARN]
 > A `StructView` is only valid while the underlying IDL variable keeps holding that structure. If IDL frees or replaces the data (for example with `idlrun("s = 42")`), a held view will point at freed memory. Re-fetch it with `jlstruct` instead of holding on to it across IDL calls.
 
-### Running arbitrary IDL strings
+## Objects
+IDL objects (`HASH`, `LIST`, `DICTIONARY`, `IDL_Container`, user classes) live in heap variables and are reached through variables of type `OBJREF`.
+`jlobject` (or `IDL.h[]`) wraps one, and properties, methods and brackets are forwarded to it:
+```julia
+julia> idlrun("h = HASH('a', 1, 'b', 2)")
+
+julia> h = jlobject(:h)
+IDLObject('H')
+
+julia> h.count()
+2
+
+julia> h["a"]
+1
+
+julia> h["c"] = 3; h.count()
+3
+```
+A new object is built by calling its class. Arguments are passed as IDL literals: scalars, strings, arrays, `NamedTuple`s (structures), `nothing` (`!NULL`) and other `IDLObject`s (by reference).
+IDL errors come back as julia errors rather than taking the process down:
+```julia
+julia> h["nope"]
+ERROR: % Key does not exist: "nope"
+
+julia> h.nosuchmethod()
+ERROR: % Attempt to call undefined method: 'HASH::NOSUCHMETHOD'.
+```
+Limitations:
+- IDL resolves a parenthesised name as a *function* method, so procedure methods have to be run as statements instead:
+```julia
+julia> l = IDLObject(:LIST)
+
+julia> idlrun("l->Add, 3") # `l->Add(3)` is not a valid call
+
+julia> l.count()
+1
+```
+- Arrays of objects, and structure tags holding objects, are not supported. Reading one throws instead of returning bad data.
+
+> [!WARN]
+> `jlobject` views an existing IDL variable, so reassigning that variable in IDL leaves the wrapper without an object and using it then throws. `IDLObject(:HASH, ...)` owns the object it creates and has no such limitation.
+
+## Dictionaries
+`jldict` gives a `HASH` the julia `AbstractDict` interface, and `idldict` builds the `HASH` from a julia dict. The entries stay in IDL, so edits made from either language are visible from the other:
+```julia
+julia> idldict(:myhash, Dict("a" => 1, "b" => [1.0, 2.0]));
+
+julia> d = jldict(:myhash);
+
+julia> d["b"]
+2-element Vector{Float64}:
+ 1.0
+ 2.0
+
+julia> d["c"] = 3;
+
+julia> idlrun("print, myhash['c']")
+       3
+```
+Only a `HASH`, or a subclass of one such as `DICTIONARY`, can back a dict.
+
+## Running arbitrary IDL strings
 This package provides the `idlrun` function that sends to idl a string to be evaluated, as if you're typing it in the IDL console. Accepts multiline strings, with comments and linebreaks.
 The same functionality is also available as a string macro:
 ```julia
@@ -317,7 +378,7 @@ julia> IDL.x[]
 10
 ```
 
-### REPL Mode
+## REPL Mode
 Calling `idlrepl()` installs an `IDL> ` prompt in the julia REPL.
 Enter it with `>` on an empty julia prompt and exit it with backspace on an empty input, like the shell and help modes.
 Every line is sent to IDL exactly like `idlrun` would.
